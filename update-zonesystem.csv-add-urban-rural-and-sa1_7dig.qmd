@@ -93,5 +93,4 @@ output_folder <- file.path(dirname(file_path), "output")
 dir.create(output_folder, showWarnings = FALSE)
 output_file <- file.path(output_folder, "zonesystem.csv")
 write.csv(zonesystem_updated[zonesystem.csv.columns], output_file, row.names = FALSE)
-output_file
 ```

@@ -77,7 +77,7 @@ destfile <- "sos_data.zip"
 # Download the file
 GET(url, write_disk(destfile, overwrite = TRUE))
 ## Response [https://www.ausstats.abs.gov.au/ausstats/subscriber.nsf/0/EE5F4698A91AD2F8CA2581B1000E09B0/$File/1270055004_sa1_ucl_sosr_sos_2016_aust_csv.zip]
-##   Date: 2025-03-19 00:09
+##   Date: 2025-03-19 00:16
 ##   Status: 200
 ##   Content-Type: application/x-zip
 ##   Size: 575 kB
@@ -193,6 +193,4 @@ output_folder <- file.path(dirname(file_path), "output")
 dir.create(output_folder, showWarnings = FALSE)
 output_file <- file.path(output_folder, "zonesystem.csv")
 write.csv(zonesystem_updated[zonesystem.csv.columns], output_file, row.names = FALSE)
-output_file
-## [1] "C:/Users/carlh/OneDrive/Desktop/output/zonesystem.csv"
 ```
