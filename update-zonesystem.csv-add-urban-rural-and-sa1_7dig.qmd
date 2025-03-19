@@ -1,0 +1,97 @@
+---
+title: "Update MITO/SILO zonesystem.csv wit urban/rural classification and 7 digit SA1 code"
+format: gfm
+knitr:
+  opts_chunk: 
+    collapse: true
+---
+
+This code is used to update the JIBE Melbourne input zonal data file [zonesystem.csv](https://gitlab.lrz.de/ga78fel/melbourne/-/blob/5304cf021d3e1bda4969b55be5f14e3c9d89312b/input/zoneSystem.csv) as uploaded to GitLab on 14 February 2025 with urban and rural classification using Australian Bureau of Statistics [Sections of State](https://www.abs.gov.au/ausstats/abs@.nsf/Lookup/by%20Subject/1270.0.55.004~July%202016~Main%20Features~Section%20of%20State%20(SOS)%20and%20Section%20of%20State%20Range%20(SOSR)~4) classifications from the Australian Statistical Geography Standard (Volume 4) for 2016.  This data is available in zipped [CSV](https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&1270055004_sa1_ucl_sosr_sos_2016_aust_csv.zip&1270.0.55.004&Data%20Cubes&EE5F4698A91AD2F8CA2581B1000E09B0&0&July%202016&09.10.2017&Latest) format for SA1 areas.
+
+```{r load-librarise}
+library(tidyverse)
+library(httr)
+library(utils)
+```
+
+
+First, we'll load in the current Melbourne `zonesystem.csv` file (current as of 18 March 2024):
+```{r read-zonesystem.csv}
+file_path <- file.choose()
+zonesystem.csv <- read.csv(file_path)
+zonesystem.csv %>% head()
+```
+
+This contains NA values for the fields `SA1_7DIG` and `urbanType`.   Also, the abbreviations for SA1_7DIG and SA1_MAIN are non-standard, and may relate to shapefile representations of these identifiers.  More properly, they would contain the year code, for example, 'SA1_MAINCODE_2016' and 'SA1_7DIGITCODE_2016'.  This is because these identifiers are year specific, and could be inadvertently result in mal-linkage if mixed with codes from another year.  To avoid this error, and facilitate transparent linkage, the names will be updated.
+
+```{r update-linkage-code-names}
+zonesystem.csv <- zonesystem.csv %>%
+  rename(
+    SA1_MAINCODE_2016 = SA1_MAIN,
+    SA1_7DIGITCODE_2016 = SA1_7DIG
+  )
+zonesystem.csv.columns <- zonesystem.csv %>% names()
+```
+
+
+```{r get-sos-data}
+# Define the URL and the destination file path
+url <- "https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&1270055004_sa1_ucl_sosr_sos_2016_aust_csv.zip&1270.0.55.004&Data%20Cubes&EE5F4698A91AD2F8CA2581B1000E09B0&0&July%202016&09.10.2017&Latest"
+destfile <- "sos_data.zip"
+
+# Download the file
+GET(url, write_disk(destfile, overwrite = TRUE))
+
+# Unzip the file
+unzip(destfile, exdir = "sos_data")
+
+# List the files in the unzipped directory
+unzipped_files <- list.files("sos_data", full.names = TRUE)
+
+# Read the CSV file (assuming there's only one CSV file in the unzipped directory)
+sections_of_state <- read_csv(unzipped_files[grepl("\\.csv$", unzipped_files)])
+
+# Display the first few rows of the data
+head(sections_of_state)
+```
+
+```{r update-zonesystem}
+# Perform a left join to merge sections_of_state with zonesystem.csv on SA1_MAINCODE_2016
+zonesystem_updated <- zonesystem.csv %>%
+  left_join(sections_of_state, by = c("SA1_MAINCODE_2016" = "SA1_MAINCODE_2016"))
+
+# Update the SA1_7DIGITCODE_2016 values in zonesystem.csv using the linked codes
+zonesystem_updated <- zonesystem_updated %>%
+  mutate(SA1_7DIGITCODE_2016 = ifelse(is.na(SA1_7DIGITCODE_2016.x), SA1_7DIGITCODE_2016.y, SA1_7DIGITCODE_2016.x)) %>%
+  select(-SA1_7DIGITCODE_2016.x, -SA1_7DIGITCODE_2016.y)
+
+# Set urbanType based on SOS_NAME_2016
+zonesystem_updated <- zonesystem_updated %>%
+  mutate(urbanType = case_when(
+    SOS_NAME_2016 %in% c("Major Urban", "Other Urban") ~ "urban",
+    TRUE ~ "rural"
+  ))
+
+# Display the first few rows of the updated data
+head(zonesystem_updated)
+```
+
+Let's just summarise the classifications before we update `zonesystem.csv` before outputting the updated file:
+
+```{r summarise-urban-rural}
+table(zonesystem_updated$SOS_NAME_2016) 
+table(zonesystem_updated$urbanType)  
+```
+
+This makes sense for Greater Melbourne, that it is overwhelmingly urban.  
+
+Now lets update `zonesystem.csv` using the updated data for the original set of columns, and then save it as a CSV in an output folder (so we don't get it mixed up with the input data, that we don't wish to overwrite for reasons of transparency).  Then, we'll manually upload this to the Melbourne Gitlab data repository.
+
+```{r export-zonesystem.csv}
+# save the updated zonesystem.csv to a new output folder
+output_folder <- file.path(dirname(file_path), "output")
+dir.create(output_folder, showWarnings = FALSE)
+output_file <- file.path(output_folder, "zonesystem.csv")
+write.csv(zonesystem_updated[zonesystem.csv.columns], output_file, row.names = FALSE)
+output_file
+```
