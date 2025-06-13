@@ -12,6 +12,7 @@ This code is used to update the JIBE Melbourne input zonal data file [zonesystem
 library(tidyverse)
 library(httr)
 library(utils)
+library(readxl)
 ```
 
 
@@ -22,13 +23,13 @@ zonesystem.csv <- read.csv(file_path)
 zonesystem.csv %>% head()
 ```
 
-This contains NA values for the fields `SA1_7DIG` and `urbanType`.   Also, the abbreviations for SA1_7DIG and SA1_MAIN are non-standard, and may relate to shapefile representations of these identifiers.  More properly, they would contain the year code, for example, 'SA1_MAINCODE_2016' and 'SA1_7DIGITCODE_2016'.  This is because these identifiers are year specific, and could be inadvertently result in mal-linkage if mixed with codes from another year.  To avoid this error, and facilitate transparent linkage, the names will be updated.
+This contains NA values for the fields `SA1_7DIG` and `urbanType`.   Also, the abbreviations for SA1_7DIG and SA1_MAIN are non-standard, and may relate to shapefile representations of these identifiers.  More properly, they would contain the year code, for example, 'SA1_MAIN16' and 'SA1_7DIG16'.  This is because these identifiers are year specific, and could be inadvertently result in mal-linkage if mixed with codes from another year.  To avoid this error, and facilitate transparent linkage, the names will be updated.
 
 ```{r update-linkage-code-names}
 zonesystem.csv <- zonesystem.csv %>%
   rename(
-    SA1_MAINCODE_2016 = SA1_MAIN,
-    SA1_7DIGITCODE_2016 = SA1_7DIG
+    SA1_MAIN16 = SA1_MAIN,
+    SA1_7DIG16 = SA1_7DIG
   )
 zonesystem.csv.columns <- zonesystem.csv %>% names()
 ```
@@ -56,14 +57,14 @@ head(sections_of_state)
 ```
 
 ```{r update-zonesystem}
-# Perform a left join to merge sections_of_state with zonesystem.csv on SA1_MAINCODE_2016
+# Perform a left join to merge sections_of_state with zonesystem.csv on SA1_MAIN16
 zonesystem_updated <- zonesystem.csv %>%
-  left_join(sections_of_state, by = c("SA1_MAINCODE_2016" = "SA1_MAINCODE_2016"))
+  left_join(sections_of_state, by = c("SA1_MAIN16" = "SA1_MAINCODE_2016"))
 
-# Update the SA1_7DIGITCODE_2016 values in zonesystem.csv using the linked codes
+# Update the SA1_7DIG16 values in zonesystem.csv using the linked codes
 zonesystem_updated <- zonesystem_updated %>%
-  mutate(SA1_7DIGITCODE_2016 = ifelse(is.na(SA1_7DIGITCODE_2016.x), SA1_7DIGITCODE_2016.y, SA1_7DIGITCODE_2016.x)) %>%
-  select(-SA1_7DIGITCODE_2016.x, -SA1_7DIGITCODE_2016.y)
+  mutate(SA1_7DIG16 = ifelse(is.na(SA1_7DIG16), SA1_7DIGITCODE_2016, SA1_7DIG16)) %>%
+  select(-SA1_7DIGITCODE_2016)
 
 # Set urbanType based on SOS_NAME_2016
 zonesystem_updated <- zonesystem_updated %>%
@@ -85,6 +86,49 @@ table(zonesystem_updated$urbanType)
 
 This makes sense for Greater Melbourne, that it is overwhelmingly urban.  
 
+Now, we also want to add on an SA2 identifier for linkage purposes.
+
+```{r add-sa2-linkage}
+# Add SA2 linkage code based on the first 9 digits of SA1_MAIN16
+zonesystem_updated <- zonesystem_updated %>%
+  mutate(SA2_MAIN16 = substr(SA1_MAIN16, 1, 9))
+
+```
+
+
+We also want to link the Socio-economic Indicators for Areas (SEIFA) Index of Relative Socio-economic Disadvantage deciles to the zonesystem.csv file.
+
+```{r get-seifa-data}
+url <- "https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&2033055001%20-%20sa1%20indexes.xls&2033.0.55.001&Data%20Cubes&40A0EFDE970A1511CA25825D000F8E8D&0&2016&27.03.2018&Latest"
+destfile_seifa <- "abs_seifa_data_2016.xls"
+GET(url, write_disk(destfile_seifa, overwrite = TRUE))
+# Read the SEIFA data from the Excel file
+seifa_data <- read_excel(destfile_seifa, sheet = "Table 1", skip = 5, n_max = 55140)
+# Display the first and last rows of the SEIFA data and manually check read in
+head(seifa_data)
+tail(seifa_data)
+``` 
+
+The first 4 columns are : SA1_7IG16, SA1_MAIN16, SEIFA_IRSD_2016, and SEIFA_IRSD_DECILE_2016.  We will use these to link the SEIFA deciles to the zonesystem.csv file by SA1_MAIN16.
+
+```{r update-seifa-linkage}
+# Rename columns for clarity
+colnames <- seifa_data %>% names()
+seifa_data <- seifa_data %>%
+  rename(
+    SA1_7DIG16 = !!colnames[1],
+    SA1_MAIN16 = !!colnames[2],
+    SEIFA_IRSD_2016 = !!colnames[3],
+    SEIFA_IRSD_DECILE_2016 = !!colnames[4]
+  )
+# Perform a left join to merge SEIFA data with zonesystem_updated on SA1_MAIN16
+zonesystem_updated <- zonesystem_updated %>%
+  left_join(seifa_data[,c('SA1_MAIN16','SEIFA_IRSD_DECILE_2016')], by = "SA1_MAIN16")
+
+# Display the first few rows of the updated data with SEIFA
+head(zonesystem_updated)
+```
+
 Now lets update `zonesystem.csv` using the updated data for the original set of columns, and then save it as a CSV in an output folder (so we don't get it mixed up with the input data, that we don't wish to overwrite for reasons of transparency).  Then, we'll manually upload this to the Melbourne Gitlab data repository.
 
 ```{r export-zonesystem.csv}
@@ -92,5 +136,5 @@ Now lets update `zonesystem.csv` using the updated data for the original set of 
 output_folder <- file.path(dirname(file_path), "output")
 dir.create(output_folder, showWarnings = FALSE)
 output_file <- file.path(output_folder, "zonesystem.csv")
-write.csv(zonesystem_updated[zonesystem.csv.columns], output_file, row.names = FALSE)
+write.csv(zonesystem_updated[c(zonesystem.csv.columns,"SA2_MAIN16","SEIFA_IRSD_DECILE_2016")], output_file, row.names = FALSE)
 ```

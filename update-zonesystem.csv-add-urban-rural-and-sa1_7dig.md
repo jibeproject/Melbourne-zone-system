@@ -14,18 +14,25 @@ format for SA1 areas.
 
 ``` r
 library(tidyverse)
+## Warning: package 'tidyverse' was built under R version 4.4.2
+## Warning: package 'purrr' was built under R version 4.4.2
+## Warning: package 'stringr' was built under R version 4.4.2
+## Warning: package 'lubridate' was built under R version 4.4.2
 ## ── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
 ## ✔ dplyr     1.1.4     ✔ readr     2.1.5
 ## ✔ forcats   1.0.0     ✔ stringr   1.5.1
 ## ✔ ggplot2   3.5.1     ✔ tibble    3.2.1
-## ✔ lubridate 1.9.3     ✔ tidyr     1.3.1
+## ✔ lubridate 1.9.4     ✔ tidyr     1.3.1
 ## ✔ purrr     1.0.2     
 ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
 ## ✖ dplyr::filter() masks stats::filter()
 ## ✖ dplyr::lag()    masks stats::lag()
 ## ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
 library(httr)
+## Warning: package 'httr' was built under R version 4.4.2
 library(utils)
+library(readxl)
+## Warning: package 'readxl' was built under R version 4.4.2
 ```
 
 First, we’ll load in the current Melbourne `zonesystem.csv` file
@@ -54,17 +61,17 @@ zonesystem.csv %>% head()
 This contains NA values for the fields `SA1_7DIG` and `urbanType`. Also,
 the abbreviations for SA1_7DIG and SA1_MAIN are non-standard, and may
 relate to shapefile representations of these identifiers. More properly,
-they would contain the year code, for example, ‘SA1_MAINCODE_2016’ and
-‘SA1_7DIGITCODE_2016’. This is because these identifiers are year
-specific, and could be inadvertently result in mal-linkage if mixed with
-codes from another year. To avoid this error, and facilitate transparent
-linkage, the names will be updated.
+they would contain the year code, for example, ‘SA1_MAIN16’ and
+‘SA1_7DIG16’. This is because these identifiers are year specific, and
+could be inadvertently result in mal-linkage if mixed with codes from
+another year. To avoid this error, and facilitate transparent linkage,
+the names will be updated.
 
 ``` r
 zonesystem.csv <- zonesystem.csv %>%
   rename(
-    SA1_MAINCODE_2016 = SA1_MAIN,
-    SA1_7DIGITCODE_2016 = SA1_7DIG
+    SA1_MAIN16 = SA1_MAIN,
+    SA1_7DIG16 = SA1_7DIG
   )
 zonesystem.csv.columns <- zonesystem.csv %>% names()
 ```
@@ -77,11 +84,11 @@ destfile <- "sos_data.zip"
 # Download the file
 GET(url, write_disk(destfile, overwrite = TRUE))
 ## Response [https://www.ausstats.abs.gov.au/ausstats/subscriber.nsf/0/EE5F4698A91AD2F8CA2581B1000E09B0/$File/1270055004_sa1_ucl_sosr_sos_2016_aust_csv.zip]
-##   Date: 2025-03-19 00:16
+##   Date: 2025-06-13 07:28
 ##   Status: 200
 ##   Content-Type: application/x-zip
 ##   Size: 575 kB
-## <ON DISK>  C:\Users\carlh\OneDrive - RMIT University\General - JIBE working group\melbourne\travel_demand_model_mito\sos_data.zip
+## <ON DISK>  D:\projects\jibe\Melbourne-zone-system\sos_data.zip
 
 # Unzip the file
 unzip(destfile, exdir = "sos_data")
@@ -117,14 +124,14 @@ head(sections_of_state)
 ```
 
 ``` r
-# Perform a left join to merge sections_of_state with zonesystem.csv on SA1_MAINCODE_2016
+# Perform a left join to merge sections_of_state with zonesystem.csv on SA1_MAIN16
 zonesystem_updated <- zonesystem.csv %>%
-  left_join(sections_of_state, by = c("SA1_MAINCODE_2016" = "SA1_MAINCODE_2016"))
+  left_join(sections_of_state, by = c("SA1_MAIN16" = "SA1_MAINCODE_2016"))
 
-# Update the SA1_7DIGITCODE_2016 values in zonesystem.csv using the linked codes
+# Update the SA1_7DIG16 values in zonesystem.csv using the linked codes
 zonesystem_updated <- zonesystem_updated %>%
-  mutate(SA1_7DIGITCODE_2016 = ifelse(is.na(SA1_7DIGITCODE_2016.x), SA1_7DIGITCODE_2016.y, SA1_7DIGITCODE_2016.x)) %>%
-  select(-SA1_7DIGITCODE_2016.x, -SA1_7DIGITCODE_2016.y)
+  mutate(SA1_7DIG16 = ifelse(is.na(SA1_7DIG16), SA1_7DIGITCODE_2016, SA1_7DIG16)) %>%
+  select(-SA1_7DIGITCODE_2016)
 
 # Set urbanType based on SOS_NAME_2016
 zonesystem_updated <- zonesystem_updated %>%
@@ -135,13 +142,13 @@ zonesystem_updated <- zonesystem_updated %>%
 
 # Display the first few rows of the updated data
 head(zonesystem_updated)
-##   SA1_MAINCODE_2016 CHR EYA EE EDU       FIN       FR       PHC      RSPF
-## 1       20601110501   0   0  0   0 0.0000000 0.000000 0.0000000 0.0000000
-## 2       20601110502   0   0  0   0 0.0000000 1.766788 0.0000000 0.5815015
-## 3       20601110503   0   0  0   0 0.0000000 0.000000 0.4285339 0.0000000
-## 4       20601110504   0   0  0   0 0.1240565 0.000000 0.0000000 0.0000000
-## 5       20601110505   0   0  0   0 0.0000000 0.000000 0.0000000 0.0000000
-## 6       20601110506   0   0  0   0 0.0000000 0.000000 0.0000000 0.0000000
+##   SA1_7DIG16  SA1_MAIN16 CHR EYA EE EDU       FIN       FR       PHC      RSPF
+## 1    2110501 20601110501   0   0  0   0 0.0000000 0.000000 0.0000000 0.0000000
+## 2    2110502 20601110502   0   0  0   0 0.0000000 1.766788 0.0000000 0.5815015
+## 3    2110503 20601110503   0   0  0   0 0.0000000 0.000000 0.4285339 0.0000000
+## 4    2110504 20601110504   0   0  0   0 0.1240565 0.000000 0.0000000 0.0000000
+## 5    2110505 20601110505   0   0  0   0 0.0000000 0.000000 0.0000000 0.0000000
+## 6    2110506 20601110506   0   0  0   0 0.0000000 0.000000 0.0000000 0.0000000
 ##         SER SCL work education  HH POS  HH_sqrt urbanType UCL_CODE_2016
 ## 1 0.0000000   0    0         0 105   0 10.24695     urban        201001
 ## 2 0.7915657   0    4         0 364   0 19.07878     urban        201001
@@ -156,13 +163,13 @@ head(zonesystem_updated)
 ## 4     Melbourne            201 1 million or more            20   Major Urban
 ## 5     Melbourne            201 1 million or more            20   Major Urban
 ## 6     Melbourne            201 1 million or more            20   Major Urban
-##   STE_CODE_2016 STE_NAME_2016 AREA_ALBERS_SQKM SA1_7DIGITCODE_2016
-## 1             2      Victoria           0.0410             2110501
-## 2             2      Victoria           0.1237             2110502
-## 3             2      Victoria           0.0622             2110503
-## 4             2      Victoria           0.0597             2110504
-## 5             2      Victoria           0.0685             2110505
-## 6             2      Victoria           0.0799             2110506
+##   STE_CODE_2016 STE_NAME_2016 AREA_ALBERS_SQKM
+## 1             2      Victoria           0.0410
+## 2             2      Victoria           0.1237
+## 3             2      Victoria           0.0622
+## 4             2      Victoria           0.0597
+## 5             2      Victoria           0.0685
+## 6             2      Victoria           0.0799
 ```
 
 Let’s just summarise the classifications before we update
@@ -181,6 +188,142 @@ table(zonesystem_updated$urbanType)
 
 This makes sense for Greater Melbourne, that it is overwhelmingly urban.
 
+Now, we also want to add on an SA2 identifier for linkage purposes.
+
+``` r
+# Add SA2 linkage code based on the first 9 digits of SA1_MAIN16
+zonesystem_updated <- zonesystem_updated %>%
+  mutate(SA2_MAIN16 = substr(SA1_MAIN16, 1, 9))
+```
+
+We also want to link the Socio-economic Indicators for Areas (SEIFA)
+Index of Relative Socio-economic Disadvantage deciles to the
+zonesystem.csv file.
+
+``` r
+url <- "https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&2033055001%20-%20sa1%20indexes.xls&2033.0.55.001&Data%20Cubes&40A0EFDE970A1511CA25825D000F8E8D&0&2016&27.03.2018&Latest"
+destfile_seifa <- "abs_seifa_data_2016.xls"
+GET(url, write_disk(destfile_seifa, overwrite = TRUE))
+## Response [https://www.ausstats.abs.gov.au/ausstats/subscriber.nsf/0/40A0EFDE970A1511CA25825D000F8E8D/$File/2033055001%20-%20sa1%20indexes.xls]
+##   Date: 2025-06-13 07:28
+##   Status: 200
+##   Content-Type: application/vnd.ms-excel
+##   Size: 54.1 MB
+## <ON DISK>  D:\projects\jibe\Melbourne-zone-system\abs_seifa_data_2016.xls
+# Read the SEIFA data from the Excel file
+seifa_data <- read_excel(destfile_seifa, sheet = "Table 1", skip = 5, n_max = 55140)
+## Warning: Expecting numeric in I12100 / R12100C9: got '-'
+## Warning: Expecting numeric in J12100 / R12100C10: got '-'
+## Warning: Expecting numeric in I17202 / R17202C9: got '-'
+## Warning: Expecting numeric in J17202 / R17202C10: got '-'
+## Warning: Expecting numeric in I22695 / R22695C9: got '-'
+## Warning: Expecting numeric in J22695 / R22695C10: got '-'
+## Warning: Expecting numeric in I23371 / R23371C9: got '-'
+## Warning: Expecting numeric in J23371 / R23371C10: got '-'
+## Warning: Expecting numeric in I25962 / R25962C9: got '-'
+## Warning: Expecting numeric in J25962 / R25962C10: got '-'
+## Warning: Expecting numeric in I28407 / R28407C9: got '-'
+## Warning: Expecting numeric in J28407 / R28407C10: got '-'
+## Warning: Expecting numeric in I29955 / R29955C9: got '-'
+## Warning: Expecting numeric in J29955 / R29955C10: got '-'
+## Warning: Expecting numeric in I54086 / R54086C9: got '-'
+## Warning: Expecting numeric in J54086 / R54086C10: got '-'
+## Warning: Expecting numeric in I54087 / R54087C9: got '-'
+## Warning: Expecting numeric in J54087 / R54087C10: got '-'
+## New names:
+## • `` -> `...1`
+## • `` -> `...2`
+## • `Score` -> `Score...3`
+## • `Decile` -> `Decile...4`
+## • `Score` -> `Score...5`
+## • `Decile` -> `Decile...6`
+## • `Score` -> `Score...7`
+## • `Decile` -> `Decile...8`
+## • `Score` -> `Score...9`
+## • `Decile` -> `Decile...10`
+## • `` -> `...11`
+# Display the first and last rows of the SEIFA data and manually check read in
+head(seifa_data)
+## # A tibble: 6 × 11
+##      ...1    ...2 Score...3 Decile...4 Score...5 Decile...6 Score...7 Decile...8
+##     <dbl>   <dbl> <chr>     <chr>      <chr>     <chr>      <chr>     <chr>     
+## 1 1100701 1.01e10 991       4          972       4          1001      5         
+## 2 1100702 1.01e10 1044      7          1044      7          1078      8         
+## 3 1100703 1.01e10 980       4          962       4          951       3         
+## 4 1100704 1.01e10 984       4          970       4          986       5         
+## 5 1100705 1.01e10 944       3          936       3          965       4         
+## 6 1100706 1.01e10 972       4          943       3          1001      5         
+## # ℹ 3 more variables: Score...9 <dbl>, Decile...10 <dbl>, ...11 <dbl>
+tail(seifa_data)
+## # A tibble: 6 × 11
+##      ...1    ...2 Score...3 Decile...4 Score...5 Decile...6 Score...7 Decile...8
+##     <dbl>   <dbl> <chr>     <chr>      <chr>     <chr>      <chr>     <chr>     
+## 1 9100302 9.01e10 611       1          709       1          712       1         
+## 2 9100401 9.01e10 1042      7          993       5          1022      6         
+## 3 9100402 9.01e10 1016      5          982       4          1003      5         
+## 4 9100403 9.01e10 989       4          952       3          989       5         
+## 5 9100404 9.01e10 943       3          927       3          934       3         
+## 6 9100407 9.01e10 1057      7          1020      6          1039      7         
+## # ℹ 3 more variables: Score...9 <dbl>, Decile...10 <dbl>, ...11 <dbl>
+```
+
+The first 4 columns are : SA1_7IG16, SA1_MAIN16, SEIFA_IRSD_2016, and
+SEIFA_IRSD_DECILE_2016. We will use these to link the SEIFA deciles to
+the zonesystem.csv file by SA1_MAIN16.
+
+``` r
+# Rename columns for clarity
+colnames <- seifa_data %>% names()
+seifa_data <- seifa_data %>%
+  rename(
+    SA1_7DIG16 = !!colnames[1],
+    SA1_MAIN16 = !!colnames[2],
+    SEIFA_IRSD_2016 = !!colnames[3],
+    SEIFA_IRSD_DECILE_2016 = !!colnames[4]
+  )
+# Perform a left join to merge SEIFA data with zonesystem_updated on SA1_MAIN16
+zonesystem_updated <- zonesystem_updated %>%
+  left_join(seifa_data[,c('SA1_MAIN16','SEIFA_IRSD_DECILE_2016')], by = "SA1_MAIN16")
+
+# Display the first few rows of the updated data with SEIFA
+head(zonesystem_updated)
+##   SA1_7DIG16  SA1_MAIN16 CHR EYA EE EDU       FIN       FR       PHC      RSPF
+## 1    2110501 20601110501   0   0  0   0 0.0000000 0.000000 0.0000000 0.0000000
+## 2    2110502 20601110502   0   0  0   0 0.0000000 1.766788 0.0000000 0.5815015
+## 3    2110503 20601110503   0   0  0   0 0.0000000 0.000000 0.4285339 0.0000000
+## 4    2110504 20601110504   0   0  0   0 0.1240565 0.000000 0.0000000 0.0000000
+## 5    2110505 20601110505   0   0  0   0 0.0000000 0.000000 0.0000000 0.0000000
+## 6    2110506 20601110506   0   0  0   0 0.0000000 0.000000 0.0000000 0.0000000
+##         SER SCL work education  HH POS  HH_sqrt urbanType UCL_CODE_2016
+## 1 0.0000000   0    0         0 105   0 10.24695     urban        201001
+## 2 0.7915657   0    4         0 364   0 19.07878     urban        201001
+## 3 0.0000000   0    0         0 193   0 13.89244     urban        201001
+## 4 0.2426518   0    0         0 180   0 13.41641     urban        201001
+## 5 0.0000000   0    1         0 172   0 13.11488     urban        201001
+## 6 0.5908710   0    0         0 231   0 15.19868     urban        201001
+##   UCL_NAME_2016 SOSR_CODE_2016    SOSR_NAME_2016 SOS_CODE_2016 SOS_NAME_2016
+## 1     Melbourne            201 1 million or more            20   Major Urban
+## 2     Melbourne            201 1 million or more            20   Major Urban
+## 3     Melbourne            201 1 million or more            20   Major Urban
+## 4     Melbourne            201 1 million or more            20   Major Urban
+## 5     Melbourne            201 1 million or more            20   Major Urban
+## 6     Melbourne            201 1 million or more            20   Major Urban
+##   STE_CODE_2016 STE_NAME_2016 AREA_ALBERS_SQKM SA2_MAIN16
+## 1             2      Victoria           0.0410  206011105
+## 2             2      Victoria           0.1237  206011105
+## 3             2      Victoria           0.0622  206011105
+## 4             2      Victoria           0.0597  206011105
+## 5             2      Victoria           0.0685  206011105
+## 6             2      Victoria           0.0799  206011105
+##   SEIFA_IRSD_DECILE_2016
+## 1                      7
+## 2                      5
+## 3                      4
+## 4                      6
+## 5                      8
+## 6                      5
+```
+
 Now lets update `zonesystem.csv` using the updated data for the original
 set of columns, and then save it as a CSV in an output folder (so we
 don’t get it mixed up with the input data, that we don’t wish to
@@ -192,5 +335,5 @@ to the Melbourne Gitlab data repository.
 output_folder <- file.path(dirname(file_path), "output")
 dir.create(output_folder, showWarnings = FALSE)
 output_file <- file.path(output_folder, "zonesystem.csv")
-write.csv(zonesystem_updated[zonesystem.csv.columns], output_file, row.names = FALSE)
+write.csv(zonesystem_updated[c(zonesystem.csv.columns,"SA2_MAIN16","SEIFA_IRSD_DECILE_2016")], output_file, row.names = FALSE)
 ```
