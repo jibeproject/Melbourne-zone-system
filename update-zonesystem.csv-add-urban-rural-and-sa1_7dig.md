@@ -4,13 +4,8 @@ digit SA1 code
 
 This code is used to update the JIBE Melbourne input zonal data file
 [zonesystem.csv](https://gitlab.lrz.de/ga78fel/melbourne/-/blob/5304cf021d3e1bda4969b55be5f14e3c9d89312b/input/zoneSystem.csv)
-as uploaded to GitLab on 14 February 2025 with urban and rural
-classification using Australian Bureau of Statistics [Sections of
-State](https://www.abs.gov.au/ausstats/abs@.nsf/Lookup/by%20Subject/1270.0.55.004~July%202016~Main%20Features~Section%20of%20State%20(SOS)%20and%20Section%20of%20State%20Range%20(SOSR)~4)
-classifications from the Australian Statistical Geography Standard
-(Volume 4) for 2016. This data is available in zipped
-[CSV](https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&1270055004_sa1_ucl_sosr_sos_2016_aust_csv.zip&1270.0.55.004&Data%20Cubes&EE5F4698A91AD2F8CA2581B1000E09B0&0&July%202016&09.10.2017&Latest)
-format for SA1 areas.
+as uploaded to GitLab on 14 February 2025 with additional linkage
+attributes.
 
 ``` r
 library(tidyverse)
@@ -33,6 +28,26 @@ library(httr)
 library(utils)
 library(readxl)
 ## Warning: package 'readxl' was built under R version 4.4.2
+library(sf)
+## Warning: package 'sf' was built under R version 4.4.3
+## Linking to GEOS 3.13.0, GDAL 3.10.1, PROJ 9.5.1; sf_use_s2() is TRUE
+library(data.table)
+## Warning: package 'data.table' was built under R version 4.4.2
+## 
+## Attaching package: 'data.table'
+## 
+## The following objects are masked from 'package:lubridate':
+## 
+##     hour, isoweek, mday, minute, month, quarter, second, wday, week,
+##     yday, year
+## 
+## The following objects are masked from 'package:dplyr':
+## 
+##     between, first, last
+## 
+## The following object is masked from 'package:purrr':
+## 
+##     transpose
 ```
 
 First, we’ll load in the current Melbourne `zonesystem.csv` file
@@ -58,14 +73,24 @@ zonesystem.csv %>% head()
 ## 6 0.5908710   0    0         0 231   0 15.19868        NA
 ```
 
-This contains NA values for the fields `SA1_7DIG` and `urbanType`. Also,
-the abbreviations for SA1_7DIG and SA1_MAIN are non-standard, and may
-relate to shapefile representations of these identifiers. More properly,
-they would contain the year code, for example, ‘SA1_MAIN16’ and
-‘SA1_7DIG16’. This is because these identifiers are year specific, and
-could be inadvertently result in mal-linkage if mixed with codes from
-another year. To avoid this error, and facilitate transparent linkage,
-the names will be updated.
+## Add urban/rural classification
+
+Urban and rural classification will be added using Australian Bureau of
+Statistics [Sections of
+State](https://www.abs.gov.au/ausstats/abs@.nsf/Lookup/by%20Subject/1270.0.55.004~July%202016~Main%20Features~Section%20of%20State%20(SOS)%20and%20Section%20of%20State%20Range%20(SOSR)~4)
+classifications from the Australian Statistical Geography Standard
+(Volume 4) for 2016. This data is available in zipped
+[CSV](https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&1270055004_sa1_ucl_sosr_sos_2016_aust_csv.zip&1270.0.55.004&Data%20Cubes&EE5F4698A91AD2F8CA2581B1000E09B0&0&July%202016&09.10.2017&Latest)
+format for SA1 areas.
+
+The previously extracted zone file contains NA values for the fields
+`SA1_7DIG` and `urbanType`. Also, the abbreviations for SA1_7DIG and
+SA1_MAIN are non-standard, and may relate to shapefile representations
+of these identifiers. More properly, they would contain the year code,
+for example, ‘SA1_MAIN16’ and ‘SA1_7DIG16’. This is because these
+identifiers are year specific, and could be inadvertently result in
+mal-linkage if mixed with codes from another year. To avoid this error,
+and facilitate transparent linkage, the names will be updated.
 
 ``` r
 zonesystem.csv <- zonesystem.csv %>%
@@ -84,7 +109,7 @@ destfile <- "sos_data.zip"
 # Download the file
 GET(url, write_disk(destfile, overwrite = TRUE))
 ## Response [https://www.ausstats.abs.gov.au/ausstats/subscriber.nsf/0/EE5F4698A91AD2F8CA2581B1000E09B0/$File/1270055004_sa1_ucl_sosr_sos_2016_aust_csv.zip]
-##   Date: 2025-06-13 07:28
+##   Date: 2025-06-16 07:04
 ##   Status: 200
 ##   Content-Type: application/x-zip
 ##   Size: 575 kB
@@ -188,6 +213,8 @@ table(zonesystem_updated$urbanType)
 
 This makes sense for Greater Melbourne, that it is overwhelmingly urban.
 
+## Add SA2 identifier for linkage purposes
+
 Now, we also want to add on an SA2 identifier for linkage purposes.
 
 ``` r
@@ -195,6 +222,8 @@ Now, we also want to add on an SA2 identifier for linkage purposes.
 zonesystem_updated <- zonesystem_updated %>%
   mutate(SA2_MAIN16 = substr(SA1_MAIN16, 1, 9))
 ```
+
+## Add SEIFA Index of Relative Socio-economic Disadvantage deciles
 
 We also want to link the Socio-economic Indicators for Areas (SEIFA)
 Index of Relative Socio-economic Disadvantage deciles to the
@@ -205,7 +234,7 @@ url <- "https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&2033055001%
 destfile_seifa <- "abs_seifa_data_2016.xls"
 GET(url, write_disk(destfile_seifa, overwrite = TRUE))
 ## Response [https://www.ausstats.abs.gov.au/ausstats/subscriber.nsf/0/40A0EFDE970A1511CA25825D000F8E8D/$File/2033055001%20-%20sa1%20indexes.xls]
-##   Date: 2025-06-13 07:28
+##   Date: 2025-06-16 07:04
 ##   Status: 200
 ##   Content-Type: application/vnd.ms-excel
 ##   Size: 54.1 MB
@@ -324,6 +353,135 @@ head(zonesystem_updated)
 ## 6                      5
 ```
 
+## Add population weighted centroid coordinates
+
+To add population weighted centroid coordinates, we will retrieve Mesh
+Block boundaries with SA1 linkage codes and join these with Mesh Block
+person counts. The latter will the average of Mesh Block centroids
+weighted by population data by SA1 will then be evaluated and the
+resulting centroid linked on SA1.
+
+``` r
+# Download the SA1 Mesh Block boundaries for Victoria
+sa1_mesh_url <- "https://www.abs.gov.au/AUSSTATS/subscriber.nsf/log?openagent&1270055001_mb_2016_vic_shape.zip&1270.0.55.001&Data%20Cubes&04F12B9E465AE765CA257FED0013B20F&0&July%202016&12.07.2016&Latest"
+destfile_mesh <- "abs_sa1_mesh_block_boundaries_vic_2016.shp.zip"
+GET(sa1_mesh_url, write_disk(destfile_mesh, overwrite = TRUE))
+## Response [https://www.ausstats.abs.gov.au/ausstats/subscriber.nsf/0/04F12B9E465AE765CA257FED0013B20F/$File/1270055001_mb_2016_vic_shape.zip]
+##   Date: 2025-06-16 07:04
+##   Status: 200
+##   Content-Type: application/x-zip
+##   Size: 40.5 MB
+## <ON DISK>  D:\projects\jibe\Melbourne-zone-system\abs_sa1_mesh_block_boundaries_vic_2016.shp.zip
+
+mesh_blocks <- sf::read_sf(destfile_mesh, layer = "MB_2016_VIC")
+
+person_counts_url <- "https://www.abs.gov.au/AUSSTATS/subscriber.nsf/log?openagent&2016%20census%20mesh%20block%20counts.csv&2074.0&Data%20Cubes&1DED88080198D6C6CA2581520083D113&0&2016&04.07.2017&Latest"
+destfile_counts <- "abs_sa1_mesh_block_person_counts_2016.csv"
+GET(person_counts_url, write_disk(destfile_counts, overwrite = TRUE))
+## Response [https://www.ausstats.abs.gov.au/ausstats/subscriber.nsf/0/1DED88080198D6C6CA2581520083D113/$File/2016%20census%20mesh%20block%20counts.csv]
+##   Date: 2025-06-16 07:04
+##   Status: 200
+##   Content-Type: application/octet-stream
+##   Size: 14 MB
+## <ON DISK>  D:\projects\jibe\Melbourne-zone-system\abs_sa1_mesh_block_person_counts_2016.csv
+person_counts <- read_csv(destfile_counts)
+## Rows: 358127 Columns: 6
+## ── Column specification ────────────────────────────────────────────────────────
+## Delimiter: ","
+## chr (2): MB_CODE_2016, MB_CATEGORY_NAME_2016
+## dbl (4): AREA_ALBERS_SQKM, Dwelling, Person, State
+## 
+## ℹ Use `spec()` to retrieve the full column specification for this data.
+## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+# Join the person counts with the mesh blocks
+mesh_blocks <- mesh_blocks %>%
+  left_join(person_counts, by = c("MB_CODE16" = "MB_CODE_2016"))
+
+# Re-project from EPSG4283 to EPSG 28355 
+mesh_blocks <- st_transform(mesh_blocks, crs = 28355)
+
+mesh_blocks[, c("x", "y")] <- st_coordinates(st_centroid(mesh_blocks))
+## Warning: st_centroid assumes attributes are constant over geometries
+
+# Calculate population-weighted centroid for each SA1
+# Using the method described by the ABS (applied for Mesh Blocks), where the centroid is calculated as the weighted average of the coordinates of the mesh blocks within each SA1
+# https://www.abs.gov.au/ausstats/abs@.nsf/Previousproducts/3218.0Glossary12016?opendocument&tabname=Notes&prodno=3218.0&issue=2016&num=&view=
+
+# Convert mesh_blocks to data.table
+dt <- as.data.table(mesh_blocks)
+
+sa1_centroids <- dt[, .(
+  mesh_block_person_count_2016 = sum(Person),
+  pwc_x_epsg_28355 = sum(x * Person) / sum(Person),
+  pwc_y_epsg_28355 = sum(y * Person) / sum(Person)
+), by = SA1_7DIG16]
+
+sa1_centroids$SA1_7DIG16 <- as.double(sa1_centroids$SA1_7DIG16)
+
+# If any coordinates are NA, set these using the mean of the Mesh Block coordinates for that SA1, using data.table methods
+sa1_centroids[, pwc_x_epsg_28355 := ifelse(
+  is.na(pwc_x_epsg_28355),
+  mean(pwc_x_epsg_28355, na.rm = TRUE),
+  pwc_x_epsg_28355
+), by = SA1_7DIG16]
+
+sa1_centroids[, pwc_y_epsg_28355 := ifelse(
+  is.na(pwc_y_epsg_28355),
+  mean(pwc_y_epsg_28355, na.rm = TRUE),
+  pwc_y_epsg_28355
+), by = SA1_7DIG16]
+
+# Join the population-weighted centroids back to the zonesystem_updated
+zonesystem_updated <- zonesystem_updated %>%
+  left_join(sa1_centroids, by = "SA1_7DIG16")
+
+zonesystem_updated %>% head()
+##   SA1_7DIG16  SA1_MAIN16 CHR EYA EE EDU       FIN       FR       PHC      RSPF
+## 1    2110501 20601110501   0   0  0   0 0.0000000 0.000000 0.0000000 0.0000000
+## 2    2110502 20601110502   0   0  0   0 0.0000000 1.766788 0.0000000 0.5815015
+## 3    2110503 20601110503   0   0  0   0 0.0000000 0.000000 0.4285339 0.0000000
+## 4    2110504 20601110504   0   0  0   0 0.1240565 0.000000 0.0000000 0.0000000
+## 5    2110505 20601110505   0   0  0   0 0.0000000 0.000000 0.0000000 0.0000000
+## 6    2110506 20601110506   0   0  0   0 0.0000000 0.000000 0.0000000 0.0000000
+##         SER SCL work education  HH POS  HH_sqrt urbanType UCL_CODE_2016
+## 1 0.0000000   0    0         0 105   0 10.24695     urban        201001
+## 2 0.7915657   0    4         0 364   0 19.07878     urban        201001
+## 3 0.0000000   0    0         0 193   0 13.89244     urban        201001
+## 4 0.2426518   0    0         0 180   0 13.41641     urban        201001
+## 5 0.0000000   0    1         0 172   0 13.11488     urban        201001
+## 6 0.5908710   0    0         0 231   0 15.19868     urban        201001
+##   UCL_NAME_2016 SOSR_CODE_2016    SOSR_NAME_2016 SOS_CODE_2016 SOS_NAME_2016
+## 1     Melbourne            201 1 million or more            20   Major Urban
+## 2     Melbourne            201 1 million or more            20   Major Urban
+## 3     Melbourne            201 1 million or more            20   Major Urban
+## 4     Melbourne            201 1 million or more            20   Major Urban
+## 5     Melbourne            201 1 million or more            20   Major Urban
+## 6     Melbourne            201 1 million or more            20   Major Urban
+##   STE_CODE_2016 STE_NAME_2016 AREA_ALBERS_SQKM SA2_MAIN16
+## 1             2      Victoria           0.0410  206011105
+## 2             2      Victoria           0.1237  206011105
+## 3             2      Victoria           0.0622  206011105
+## 4             2      Victoria           0.0597  206011105
+## 5             2      Victoria           0.0685  206011105
+## 6             2      Victoria           0.0799  206011105
+##   SEIFA_IRSD_DECILE_2016 mesh_block_person_count_2016 pwc_x_epsg_28355
+## 1                      7                          219         321348.3
+## 2                      5                          632         320813.2
+## 3                      4                          448         321107.4
+## 4                      6                          353         321306.5
+## 5                      8                          356         321039.9
+## 6                      5                          445         320708.2
+##   pwc_y_epsg_28355
+## 1          5818989
+## 2          5818610
+## 3          5818556
+## 4          5818280
+## 5          5818304
+## 6          5818351
+```
+
+## Export final data
+
 Now lets update `zonesystem.csv` using the updated data for the original
 set of columns, and then save it as a CSV in an output folder (so we
 don’t get it mixed up with the input data, that we don’t wish to
@@ -335,5 +493,5 @@ to the Melbourne Gitlab data repository.
 output_folder <- file.path(dirname(file_path), "output")
 dir.create(output_folder, showWarnings = FALSE)
 output_file <- file.path(output_folder, "zonesystem.csv")
-write.csv(zonesystem_updated[c(zonesystem.csv.columns,"SA2_MAIN16","SEIFA_IRSD_DECILE_2016")], output_file, row.names = FALSE)
+write.csv(zonesystem_updated[c(zonesystem.csv.columns,"SA2_MAIN16","SEIFA_IRSD_DECILE_2016", "mesh_block_person_count_2016","pwc_x_epsg_28355", "pwc_y_epsg_28355")], output_file, row.names = FALSE)
 ```

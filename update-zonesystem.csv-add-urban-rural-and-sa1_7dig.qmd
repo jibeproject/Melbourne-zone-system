@@ -6,13 +6,15 @@ knitr:
     collapse: true
 ---
 
-This code is used to update the JIBE Melbourne input zonal data file [zonesystem.csv](https://gitlab.lrz.de/ga78fel/melbourne/-/blob/5304cf021d3e1bda4969b55be5f14e3c9d89312b/input/zoneSystem.csv) as uploaded to GitLab on 14 February 2025 with urban and rural classification using Australian Bureau of Statistics [Sections of State](https://www.abs.gov.au/ausstats/abs@.nsf/Lookup/by%20Subject/1270.0.55.004~July%202016~Main%20Features~Section%20of%20State%20(SOS)%20and%20Section%20of%20State%20Range%20(SOSR)~4) classifications from the Australian Statistical Geography Standard (Volume 4) for 2016.  This data is available in zipped [CSV](https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&1270055004_sa1_ucl_sosr_sos_2016_aust_csv.zip&1270.0.55.004&Data%20Cubes&EE5F4698A91AD2F8CA2581B1000E09B0&0&July%202016&09.10.2017&Latest) format for SA1 areas.
+This code is used to update the JIBE Melbourne input zonal data file [zonesystem.csv](https://gitlab.lrz.de/ga78fel/melbourne/-/blob/5304cf021d3e1bda4969b55be5f14e3c9d89312b/input/zoneSystem.csv) as uploaded to GitLab on 14 February 2025 with additional linkage attributes.  
 
 ```{r load-librarise}
 library(tidyverse)
 library(httr)
 library(utils)
 library(readxl)
+library(sf)
+library(data.table)
 ```
 
 
@@ -23,7 +25,11 @@ zonesystem.csv <- read.csv(file_path)
 zonesystem.csv %>% head()
 ```
 
-This contains NA values for the fields `SA1_7DIG` and `urbanType`.   Also, the abbreviations for SA1_7DIG and SA1_MAIN are non-standard, and may relate to shapefile representations of these identifiers.  More properly, they would contain the year code, for example, 'SA1_MAIN16' and 'SA1_7DIG16'.  This is because these identifiers are year specific, and could be inadvertently result in mal-linkage if mixed with codes from another year.  To avoid this error, and facilitate transparent linkage, the names will be updated.
+
+## Add urban/rural classification
+Urban and rural classification will be added using Australian Bureau of Statistics [Sections of State](https://www.abs.gov.au/ausstats/abs@.nsf/Lookup/by%20Subject/1270.0.55.004~July%202016~Main%20Features~Section%20of%20State%20(SOS)%20and%20Section%20of%20State%20Range%20(SOSR)~4) classifications from the Australian Statistical Geography Standard (Volume 4) for 2016.  This data is available in zipped [CSV](https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&1270055004_sa1_ucl_sosr_sos_2016_aust_csv.zip&1270.0.55.004&Data%20Cubes&EE5F4698A91AD2F8CA2581B1000E09B0&0&July%202016&09.10.2017&Latest) format for SA1 areas.
+
+The previously extracted zone file contains NA values for the fields `SA1_7DIG` and `urbanType`.   Also, the abbreviations for SA1_7DIG and SA1_MAIN are non-standard, and may relate to shapefile representations of these identifiers.  More properly, they would contain the year code, for example, 'SA1_MAIN16' and 'SA1_7DIG16'.  This is because these identifiers are year specific, and could be inadvertently result in mal-linkage if mixed with codes from another year.  To avoid this error, and facilitate transparent linkage, the names will be updated.
 
 ```{r update-linkage-code-names}
 zonesystem.csv <- zonesystem.csv %>%
@@ -86,6 +92,7 @@ table(zonesystem_updated$urbanType)
 
 This makes sense for Greater Melbourne, that it is overwhelmingly urban.  
 
+## Add SA2 identifier for linkage purposes
 Now, we also want to add on an SA2 identifier for linkage purposes.
 
 ```{r add-sa2-linkage}
@@ -95,7 +102,7 @@ zonesystem_updated <- zonesystem_updated %>%
 
 ```
 
-
+## Add SEIFA Index of Relative Socio-economic Disadvantage deciles
 We also want to link the Socio-economic Indicators for Areas (SEIFA) Index of Relative Socio-economic Disadvantage deciles to the zonesystem.csv file.
 
 ```{r get-seifa-data}
@@ -129,6 +136,66 @@ zonesystem_updated <- zonesystem_updated %>%
 head(zonesystem_updated)
 ```
 
+## Add population weighted centroid coordinates
+To add population weighted centroid coordinates, we will retrieve Mesh Block boundaries with SA1 linkage codes and join these with Mesh Block person counts.  The latter will the average of Mesh Block centroids weighted by population data by SA1 will then be evaluated and the resulting centroid linked on SA1.
+```{r get-sa1-population-weighted-centroids}
+# Download the SA1 Mesh Block boundaries for Victoria
+sa1_mesh_url <- "https://www.abs.gov.au/AUSSTATS/subscriber.nsf/log?openagent&1270055001_mb_2016_vic_shape.zip&1270.0.55.001&Data%20Cubes&04F12B9E465AE765CA257FED0013B20F&0&July%202016&12.07.2016&Latest"
+destfile_mesh <- "abs_sa1_mesh_block_boundaries_vic_2016.shp.zip"
+GET(sa1_mesh_url, write_disk(destfile_mesh, overwrite = TRUE))
+
+mesh_blocks <- sf::read_sf(destfile_mesh, layer = "MB_2016_VIC")
+
+person_counts_url <- "https://www.abs.gov.au/AUSSTATS/subscriber.nsf/log?openagent&2016%20census%20mesh%20block%20counts.csv&2074.0&Data%20Cubes&1DED88080198D6C6CA2581520083D113&0&2016&04.07.2017&Latest"
+destfile_counts <- "abs_sa1_mesh_block_person_counts_2016.csv"
+GET(person_counts_url, write_disk(destfile_counts, overwrite = TRUE))
+person_counts <- read_csv(destfile_counts)
+# Join the person counts with the mesh blocks
+mesh_blocks <- mesh_blocks %>%
+  left_join(person_counts, by = c("MB_CODE16" = "MB_CODE_2016"))
+
+# Re-project from EPSG4283 to EPSG 28355 
+mesh_blocks <- st_transform(mesh_blocks, crs = 28355)
+
+mesh_blocks[, c("x", "y")] <- st_coordinates(st_centroid(mesh_blocks))
+
+# Calculate population-weighted centroid for each SA1
+# Using the method described by the ABS (applied for Mesh Blocks), where the centroid is calculated as the weighted average of the coordinates of the mesh blocks within each SA1
+# https://www.abs.gov.au/ausstats/abs@.nsf/Previousproducts/3218.0Glossary12016?opendocument&tabname=Notes&prodno=3218.0&issue=2016&num=&view=
+
+# Convert mesh_blocks to data.table
+dt <- as.data.table(mesh_blocks)
+
+sa1_centroids <- dt[, .(
+  mesh_block_person_count_2016 = sum(Person),
+  pwc_x_epsg_28355 = sum(x * Person) / sum(Person),
+  pwc_y_epsg_28355 = sum(y * Person) / sum(Person)
+), by = SA1_7DIG16]
+
+sa1_centroids$SA1_7DIG16 <- as.double(sa1_centroids$SA1_7DIG16)
+
+# If any coordinates are NA, set these using the mean of the Mesh Block coordinates for that SA1, using data.table methods
+sa1_centroids[, pwc_x_epsg_28355 := ifelse(
+  is.na(pwc_x_epsg_28355),
+  mean(pwc_x_epsg_28355, na.rm = TRUE),
+  pwc_x_epsg_28355
+), by = SA1_7DIG16]
+
+sa1_centroids[, pwc_y_epsg_28355 := ifelse(
+  is.na(pwc_y_epsg_28355),
+  mean(pwc_y_epsg_28355, na.rm = TRUE),
+  pwc_y_epsg_28355
+), by = SA1_7DIG16]
+
+# Join the population-weighted centroids back to the zonesystem_updated
+zonesystem_updated <- zonesystem_updated %>%
+  left_join(sa1_centroids, by = "SA1_7DIG16")
+
+zonesystem_updated %>% head()
+```
+
+## Export final data
+
 Now lets update `zonesystem.csv` using the updated data for the original set of columns, and then save it as a CSV in an output folder (so we don't get it mixed up with the input data, that we don't wish to overwrite for reasons of transparency).  Then, we'll manually upload this to the Melbourne Gitlab data repository.
 
 ```{r export-zonesystem.csv}
@@ -136,5 +203,5 @@ Now lets update `zonesystem.csv` using the updated data for the original set of 
 output_folder <- file.path(dirname(file_path), "output")
 dir.create(output_folder, showWarnings = FALSE)
 output_file <- file.path(output_folder, "zonesystem.csv")
-write.csv(zonesystem_updated[c(zonesystem.csv.columns,"SA2_MAIN16","SEIFA_IRSD_DECILE_2016")], output_file, row.names = FALSE)
+write.csv(zonesystem_updated[c(zonesystem.csv.columns,"SA2_MAIN16","SEIFA_IRSD_DECILE_2016", "mesh_block_person_count_2016","pwc_x_epsg_28355", "pwc_y_epsg_28355")], output_file, row.names = FALSE)
 ```
