@@ -1,5 +1,4 @@
-# Update MITO/SILO zonesystem.csv wit urban/rural classification and 7
-digit SA1 code
+# Update MITO/SILO zonesystem.csv with additional linkage attributes
 
 
 This code is used to update the JIBE Melbourne input zonal data file
@@ -103,17 +102,14 @@ zonesystem.csv.columns <- zonesystem.csv %>% names()
 
 ``` r
 # Define the URL and the destination file path
-url <- "https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&1270055004_sa1_ucl_sosr_sos_2016_aust_csv.zip&1270.0.55.004&Data%20Cubes&EE5F4698A91AD2F8CA2581B1000E09B0&0&July%202016&09.10.2017&Latest"
 destfile <- "sos_data.zip"
+url <- "https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&1270055004_sa1_ucl_sosr_sos_2016_aust_csv.zip&1270.0.55.004&Data%20Cubes&EE5F4698A91AD2F8CA2581B1000E09B0&0&July%202016&09.10.2017&Latest"
 
-# Download the file
-GET(url, write_disk(destfile, overwrite = TRUE))
-## Response [https://www.ausstats.abs.gov.au/ausstats/subscriber.nsf/0/EE5F4698A91AD2F8CA2581B1000E09B0/$File/1270055004_sa1_ucl_sosr_sos_2016_aust_csv.zip]
-##   Date: 2025-06-16 07:04
-##   Status: 200
-##   Content-Type: application/x-zip
-##   Size: 575 kB
-## <ON DISK>  D:\projects\jibe\Melbourne-zone-system\sos_data.zip
+# Download the file, if it hasn't been downloaded already
+if (!file.exists(destfile)) {
+  message("Downloading Sections of State data...")
+  GET(url, write_disk(destfile, overwrite = TRUE))
+}
 
 # Unzip the file
 unzip(destfile, exdir = "sos_data")
@@ -230,15 +226,15 @@ Index of Relative Socio-economic Disadvantage deciles to the
 zonesystem.csv file.
 
 ``` r
-url <- "https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&2033055001%20-%20sa1%20indexes.xls&2033.0.55.001&Data%20Cubes&40A0EFDE970A1511CA25825D000F8E8D&0&2016&27.03.2018&Latest"
 destfile_seifa <- "abs_seifa_data_2016.xls"
-GET(url, write_disk(destfile_seifa, overwrite = TRUE))
-## Response [https://www.ausstats.abs.gov.au/ausstats/subscriber.nsf/0/40A0EFDE970A1511CA25825D000F8E8D/$File/2033055001%20-%20sa1%20indexes.xls]
-##   Date: 2025-06-16 07:04
-##   Status: 200
-##   Content-Type: application/vnd.ms-excel
-##   Size: 54.1 MB
-## <ON DISK>  D:\projects\jibe\Melbourne-zone-system\abs_seifa_data_2016.xls
+url <- "https://www.abs.gov.au/ausstats/subscriber.nsf/log?openagent&2033055001%20-%20sa1%20indexes.xls&2033.0.55.001&Data%20Cubes&40A0EFDE970A1511CA25825D000F8E8D&0&2016&27.03.2018&Latest"
+
+# Download data if it hasn't been downloaded already
+if (!file.exists(destfile_seifa)) {
+  message("Downloading SEIFA data...")
+  GET(url, write_disk(destfile_seifa, overwrite = TRUE))
+}
+
 # Read the SEIFA data from the Excel file
 seifa_data <- read_excel(destfile_seifa, sheet = "Table 1", skip = 5, n_max = 55140)
 ## Warning: Expecting numeric in I12100 / R12100C9: got '-'
@@ -362,28 +358,26 @@ weighted by population data by SA1 will then be evaluated and the
 resulting centroid linked on SA1.
 
 ``` r
-# Download the SA1 Mesh Block boundaries for Victoria
-sa1_mesh_url <- "https://www.abs.gov.au/AUSSTATS/subscriber.nsf/log?openagent&1270055001_mb_2016_vic_shape.zip&1270.0.55.001&Data%20Cubes&04F12B9E465AE765CA257FED0013B20F&0&July%202016&12.07.2016&Latest"
 destfile_mesh <- "abs_sa1_mesh_block_boundaries_vic_2016.shp.zip"
-GET(sa1_mesh_url, write_disk(destfile_mesh, overwrite = TRUE))
-## Response [https://www.ausstats.abs.gov.au/ausstats/subscriber.nsf/0/04F12B9E465AE765CA257FED0013B20F/$File/1270055001_mb_2016_vic_shape.zip]
-##   Date: 2025-06-16 07:04
-##   Status: 200
-##   Content-Type: application/x-zip
-##   Size: 40.5 MB
-## <ON DISK>  D:\projects\jibe\Melbourne-zone-system\abs_sa1_mesh_block_boundaries_vic_2016.shp.zip
+sa1_mesh_url <- "https://www.abs.gov.au/AUSSTATS/subscriber.nsf/log?openagent&1270055001_mb_2016_vic_shape.zip&1270.0.55.001&Data%20Cubes&04F12B9E465AE765CA257FED0013B20F&0&July%202016&12.07.2016&Latest"
+
+# Download data if it hasn't been downloaded already
+if (!file.exists(destfile_mesh)) {
+  message("Downloading SA1 Mesh Block boundaries...")
+  GET(sa1_mesh_url, write_disk(destfile_mesh, overwrite = TRUE))
+}
 
 mesh_blocks <- sf::read_sf(destfile_mesh, layer = "MB_2016_VIC")
 
 person_counts_url <- "https://www.abs.gov.au/AUSSTATS/subscriber.nsf/log?openagent&2016%20census%20mesh%20block%20counts.csv&2074.0&Data%20Cubes&1DED88080198D6C6CA2581520083D113&0&2016&04.07.2017&Latest"
 destfile_counts <- "abs_sa1_mesh_block_person_counts_2016.csv"
-GET(person_counts_url, write_disk(destfile_counts, overwrite = TRUE))
-## Response [https://www.ausstats.abs.gov.au/ausstats/subscriber.nsf/0/1DED88080198D6C6CA2581520083D113/$File/2016%20census%20mesh%20block%20counts.csv]
-##   Date: 2025-06-16 07:04
-##   Status: 200
-##   Content-Type: application/octet-stream
-##   Size: 14 MB
-## <ON DISK>  D:\projects\jibe\Melbourne-zone-system\abs_sa1_mesh_block_person_counts_2016.csv
+
+# Download data if it hasn't been downloaded already
+if (!file.exists(destfile_counts)) {
+  message("Downloading Mesh Block person counts...")
+  GET(person_counts_url, write_disk(destfile_counts, overwrite = TRUE))
+}
+
 person_counts <- read_csv(destfile_counts)
 ## Rows: 358127 Columns: 6
 ## ── Column specification ────────────────────────────────────────────────────────
