@@ -412,22 +412,26 @@ sa1_centroids <- dt[, .(
 
 sa1_centroids$SA1_7DIG16 <- as.double(sa1_centroids$SA1_7DIG16)
 
-# If any coordinates are NA, set these using the mean of the Mesh Block coordinates for that SA1, using data.table methods
-sa1_centroids[, pwc_x_epsg_28355 := ifelse(
-  is.na(pwc_x_epsg_28355),
-  mean(pwc_x_epsg_28355, na.rm = TRUE),
-  pwc_x_epsg_28355
-), by = SA1_7DIG16]
-
-sa1_centroids[, pwc_y_epsg_28355 := ifelse(
-  is.na(pwc_y_epsg_28355),
-  mean(pwc_y_epsg_28355, na.rm = TRUE),
-  pwc_y_epsg_28355
-), by = SA1_7DIG16]
+# If any coordinates are NA, set these using the mean of the Mesh Block coordinates for each SA1
+sa1_centroids[is.na(pwc_x_epsg_28355), pwc_x_epsg_28355 := dt[SA1_7DIG16 == .BY$SA1_7DIG16, mean(x, na.rm = TRUE)], by = SA1_7DIG16]
+sa1_centroids[is.na(pwc_y_epsg_28355), pwc_y_epsg_28355 := dt[SA1_7DIG16 == .BY$SA1_7DIG16, mean(y, na.rm = TRUE)], by = SA1_7DIG16]
 
 # Join the population-weighted centroids back to the zonesystem_updated
 zonesystem_updated <- zonesystem_updated %>%
   left_join(sa1_centroids, by = "SA1_7DIG16")
+
+# Verify that there are no NA coordinates for SA1s in the final dataset
+na_count <- zonesystem_updated %>%
+  filter(is.na(pwc_x_epsg_28355) | is.na(pwc_y_epsg_28355)) %>%
+  nrow()
+if (na_count > 0) {
+  print(paste("There are", na_count, "SA1s with NA coordinates in the final dataset."))
+  # Show which SA1s have missing coordinates
+  missing_coords <- zonesystem_updated %>%
+    filter(is.na(pwc_x_epsg_28355) | is.na(pwc_y_epsg_28355)) %>%
+    select(SA1_7DIG16, SA1_MAIN16, pwc_x_epsg_28355, pwc_y_epsg_28355)
+  print(missing_coords)
+}
 
 zonesystem_updated %>% head()
 ##   SA1_7DIG16  SA1_MAIN16 CHR EYA EE EDU       FIN       FR       PHC      RSPF
