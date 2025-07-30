@@ -6,6 +6,129 @@ This code is used to update the JIBE Melbourne input zonal data file
 as uploaded to GitLab on 14 February 2025 with additional linkage
 attributes.
 
+# Summary of Methods
+
+## Overview
+
+This document describes the methods used to enhance the JIBE Melbourne
+zonesystem.csv file with additional linkage attributes from Australian
+Bureau of Statistics (ABS) data sources. The original zone system file
+contained basic zonal identifiers but lacked comprehensive linkage codes
+and socio-economic attributes necessary for detailed transport modeling
+analysis.
+
+## Data Sources
+
+The following ABS data sources were integrated:
+
+1.  **Sections of State (SOS) Data (2016)**: Urban/rural classification
+    data from the Australian Statistical Geography Standard
+    - Source: ABS 1270.0.55.004 SA1 Urban Centres and Localities/Section
+      of State/Section of State Range 2016
+    - Purpose: Classify zones as urban or rural
+2.  **SEIFA Index Data (2016)**: Socio-Economic Indexes for Areas
+    - Source: ABS 2033.0.55.001 SA1 Index of Relative Socio-economic
+      Disadvantage
+    - Purpose: Add socio-economic disadvantage deciles for demographic
+      analysis
+3.  **Mesh Block Boundaries and Population Data (2016)**: Geometric and
+    demographic data
+    - Source: ABS 1270.0.55.001 Mesh Block Digital Boundaries and ABS
+      Census Mesh Block Counts
+    - Purpose: Calculate population-weighted centroids for each
+      Statistical Area 1 (SA1)
+4.  **Dwelling Vacancy Data (2016)**: Population and Housing Census data
+    - Source: ABS 2016 Census Population and Housing ‘2016 Place of
+      Enumeration Profile for Statistical Area 1 (SA1)’ datapack for
+      Victoria SA1
+    - Purpose: Calculate rate of vacant dwellings
+
+## Methods Applied
+
+### 1. Standardization of Linkage Codes
+
+- Renamed `SA1_MAIN` and `SA1_7DIG` to `SA1_MAIN16` and `SA1_7DIG16`
+  respectively
+- This ensures year-specific identification and prevents inadvertent
+  linkage errors with other census years
+- Created `SA2_MAIN16` identifier from the first 9 digits of
+  `SA1_MAIN16` for higher-level geographic linkage
+
+### 2. Urban/Rural Classification
+
+- Linked Sections of State data using `SA1_MAIN16` as the join key
+- Classified zones as:
+  - “urban”: Major Urban and Other Urban areas
+  - “rural”: All other areas including migratory and no usual address
+    categories
+- Updated missing `SA1_7DIG16` values from the linked SOS data where
+  available
+
+### 3. Socio-Economic Disadvantage Integration
+
+- Integrated SEIFA Index of Relative Socio-economic Disadvantage deciles
+- Linked using `SA1_MAIN16` to provide standardized socio-economic
+  rankings (1-10 scale)
+- Decile 1 represents most disadvantaged areas, decile 10 represents
+  least disadvantaged
+
+### 4. Population-Weighted Centroid Calculation
+
+Applied the Australian Bureau of Statistics method for calculating
+population-weighted centroids:
+
+**Method**: For each SA1, the latitude and longitude coordinates of the
+geographic centroid of each constituent Mesh Block were multiplied by
+the population of each Mesh Block to obtain weighted coordinates. These
+were summed and divided by the total population of the SA1 to obtain a
+single population-weighted coordinate.
+
+**Implementation**: - Downloaded Mesh Block boundaries for Victoria
+(2016) and re-projected to EPSG:28355 (GDA94 MGA Zone 55) - Calculated
+geometric centroids for each Mesh Block - Joined with Census population
+counts by Mesh Block - Computed population-weighted mean coordinates
+grouped by SA1 - For SA1s with zero population, used unweighted
+geometric mean of constituent Mesh Blocks
+
+### 5. Dwelling Vacancy Rate Calculation
+
+- Calculated percentage vacant dwellings as:
+  `100 × (Unoccupied_private_dwgs_Dwgs / Total_Dwellings)`
+- Implemented error checking for division by zero and missing data
+- Linked to zone system using `SA1_7DIG16` ↔ `SA1_7DIGITCODE_2016`
+
+## Technical Implementation
+
+- Used R with tidyverse, sf (spatial), and data.table packages for
+  efficient data processing
+- Employed vectorized operations and data.table syntax for performance
+  optimization
+- Implemented comprehensive error checking and validation throughout the
+  process
+- All data downloads are conditional to avoid redundant downloads
+
+## Quality Assurance
+
+- Verified coordinate completeness after population-weighted centroid
+  calculation
+- Checked for non-numeric results in vacancy rate calculations
+- Displayed warnings and diagnostic information for problematic cases
+- Maintained original column structure while adding new attributes
+
+## Output
+
+The enhanced zone system file includes all original attributes plus: -
+`SA2_MAIN16`: SA2 linkage identifier - `SEIFA_IRSD_DECILE_2016`:
+Socio-economic disadvantage decile (1-10) -
+`mesh_block_person_count_2016`: Total population count from constituent
+Mesh Blocks - `pwc_x_epsg_28355`, `pwc_y_epsg_28355`:
+Population-weighted centroid coordinates in GDA94 MGA Zone 55 -
+`vacancy_rate`: Percentage of unoccupied private dwellings
+
+This enhanced dataset provides comprehensive demographic,
+socio-economic, and spatial attributes suitable for detailed transport
+demand modeling and analysis in the JIBE Melbourne model system.
+
 ``` r
 library(tidyverse)
 ## Warning: package 'tidyverse' was built under R version 4.4.2
@@ -478,6 +601,139 @@ zonesystem_updated %>% head()
 ## 6          5818351
 ```
 
+## Add percentage vacant dwellings
+
+We’ll add the percentage of vacant dwellings using data from the 2016
+Census Population and Housing data for SA1 areas in Victoria.
+
+``` r
+destfile_dwellings <- "2016_PEP_SA1_for_VIC_short-header.zip"
+dwellings_url <- "https://www.abs.gov.au/census/find-census-data/datapacks/download/2016_PEP_SA1_for_VIC_short-header.zip"
+
+# Download data if it hasn't been downloaded already
+if (!file.exists(destfile_dwellings)) {
+  message("Downloading dwelling data...")
+  GET(dwellings_url, write_disk(destfile_dwellings, overwrite = TRUE))
+}
+
+# Unzip the file
+unzip(destfile_dwellings, exdir = "dwelling_data")
+
+# Read the dwelling data CSV file
+dwelling_data <- read_csv("dwelling_data/2016 Census PEP Statistical Area 1 for VIC/2016Census_P31_VIC_SA1.csv")
+## Rows: 14072 Columns: 37
+## ── Column specification ────────────────────────────────────────────────────────
+## Delimiter: ","
+## chr  (1): Unoccupied_private_dwgs_Psns
+## dbl (36): SA1_7DIGITCODE_2016, Separate_house_Dwellings, Separate_house_Pers...
+## 
+## ℹ Use `spec()` to retrieve the full column specification for this data.
+## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+
+# Calculate percentage vacant dwellings
+dwelling_data <- dwelling_data %>%
+  mutate(
+    vacancy_rate = ifelse(Total_Dwellings == 0, 0, Unoccupied_private_dwgs_Dwgs / Total_Dwellings)
+  )
+
+# Check for non-numeric results and display warnings
+non_numeric_count <- dwelling_data %>%
+  filter(is.na(vacancy_rate) | is.infinite(vacancy_rate)) %>%
+  nrow()
+
+if (non_numeric_count > 0) {
+  warning(paste("There are", non_numeric_count, "SA1s with non-numeric vacancy_rate values (NA or Inf)."))
+  
+  # Show problematic cases
+  problematic_cases <- dwelling_data %>%
+    filter(is.na(vacancy_rate) | is.infinite(vacancy_rate)) %>%
+    select(SA1_7DIGITCODE_2016, Total_Dwellings, Unoccupied_private_dwgs_Dwgs, vacancy_rate)
+  print(problematic_cases)
+}
+
+# Join dwelling data with zonesystem_updated
+zonesystem_updated <- zonesystem_updated %>%
+  left_join(dwelling_data[, c("SA1_7DIGITCODE_2016", "vacancy_rate")], 
+            by = c("SA1_7DIG16" = "SA1_7DIGITCODE_2016"))
+
+# Display summary of the new field
+summary(zonesystem_updated$vacancy_rate)
+##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+## 0.00000 0.04571 0.06977 0.07860 0.09688 0.88978
+```
+
+## Summary of the updated zonesystem.csv
+
+Let’s summarise the updated `zonesystem.csv` file to see the new fields
+that have been added:
+
+``` r
+summary(zonesystem_updated)
+##    SA1_7DIG16        SA1_MAIN16             CHR                EYA         
+##  Min.   :2110501   Min.   :2.060e+10   Min.   : 0.00000   Min.   :0.00000  
+##  1st Qu.:2118610   1st Qu.:2.080e+10   1st Qu.: 0.00000   1st Qu.:0.00000  
+##  Median :2127614   Median :2.110e+10   Median : 0.00000   Median :0.00000  
+##  Mean   :2127474   Mean   :2.102e+10   Mean   : 0.03594   Mean   :0.08425  
+##  3rd Qu.:2135128   3rd Qu.:2.121e+10   3rd Qu.: 0.00000   3rd Qu.:0.00000  
+##  Max.   :2146828   Max.   :2.140e+10   Max.   :13.12053   Max.   :5.50649  
+##        EE               EDU               FIN                 FR         
+##  Min.   : 0.0000   Min.   :0.00000   Min.   : 0.00000   Min.   : 0.0000  
+##  1st Qu.: 0.0000   1st Qu.:0.00000   1st Qu.: 0.00000   1st Qu.: 0.0000  
+##  Median : 0.0000   Median :0.00000   Median : 0.00000   Median : 0.0000  
+##  Mean   : 0.1966   Mean   :0.03715   Mean   : 0.05198   Mean   : 0.1368  
+##  3rd Qu.: 0.0000   3rd Qu.:0.00000   3rd Qu.: 0.00000   3rd Qu.: 0.0000  
+##  Max.   :63.4058   Max.   :4.94803   Max.   :19.58056   Max.   :53.1626  
+##       PHC               RSPF               SER                SCL         
+##  Min.   :0.00000   Min.   : 0.00000   Min.   :  0.0000   Min.   :0.00000  
+##  1st Qu.:0.00000   1st Qu.: 0.00000   1st Qu.:  0.0000   1st Qu.:0.00000  
+##  Median :0.00000   Median : 0.00000   Median :  0.0000   Median :0.00000  
+##  Mean   :0.02961   Mean   : 0.04616   Mean   :  0.3699   Mean   :0.02772  
+##  3rd Qu.:0.00000   3rd Qu.: 0.00000   3rd Qu.:  0.0000   3rd Qu.:0.00000  
+##  Max.   :8.20925   Max.   :10.86753   Max.   :195.4371   Max.   :7.26985  
+##       work           education              HH              POS          
+##  Min.   :  0.000   Min.   :  0.0000   Min.   :   0.0   Min.   :  0.0000  
+##  1st Qu.:  0.000   1st Qu.:  0.0000   1st Qu.: 123.0   1st Qu.:  0.0000  
+##  Median :  0.000   Median :  0.0000   Median : 164.0   Median :  0.0086  
+##  Mean   :  1.944   Mean   :  0.8178   Mean   : 178.6   Mean   :  1.7567  
+##  3rd Qu.:  1.000   3rd Qu.:  0.0000   3rd Qu.: 214.0   3rd Qu.:  0.3755  
+##  Max.   :410.000   Max.   :171.0000   Max.   :3278.0   Max.   :696.6695  
+##     HH_sqrt       urbanType         UCL_CODE_2016    UCL_NAME_2016     
+##  Min.   : 0.00   Length:10289       Min.   :201001   Length:10289      
+##  1st Qu.:11.09   Class :character   1st Qu.:201001   Class :character  
+##  Median :12.81   Mode  :character   Median :201001   Mode  :character  
+##  Mean   :12.87                      Mean   :202383                     
+##  3rd Qu.:14.63                      3rd Qu.:201001                     
+##  Max.   :57.25                      Max.   :231777                     
+##  SOSR_CODE_2016  SOSR_NAME_2016     SOS_CODE_2016   SOS_NAME_2016     
+##  Min.   :201.0   Length:10289       Min.   :20.00   Length:10289      
+##  1st Qu.:201.0   Class :character   1st Qu.:20.00   Class :character  
+##  Median :201.0   Mode  :character   Median :20.00   Mode  :character  
+##  Mean   :202.4                      Mean   :20.13                     
+##  3rd Qu.:201.0                      3rd Qu.:20.00                     
+##  Max.   :231.0                      Max.   :23.00                     
+##  STE_CODE_2016 STE_NAME_2016      AREA_ALBERS_SQKM    SA2_MAIN16       
+##  Min.   :2     Length:10289       Min.   :  0.0023   Length:10289      
+##  1st Qu.:2     Class :character   1st Qu.:  0.1091   Class :character  
+##  Median :2     Mode  :character   Median :  0.1537   Mode  :character  
+##  Mean   :2                        Mean   :  0.9712                     
+##  3rd Qu.:2                        3rd Qu.:  0.2384                     
+##  Max.   :2                        Max.   :275.6103                     
+##  SEIFA_IRSD_DECILE_2016 mesh_block_person_count_2016 pwc_x_epsg_28355
+##  Length:10289           Min.   :   0.0               Min.   :270549  
+##  Class :character       1st Qu.: 332.0               1st Qu.:318143  
+##  Mode  :character       Median : 418.0               Median :329156  
+##                         Mean   : 435.8               Mean   :328590  
+##                         3rd Qu.: 519.0               3rd Qu.:339877  
+##                         Max.   :4354.0               Max.   :395506  
+##  pwc_y_epsg_28355   vacancy_rate    
+##  Min.   :5739814   Min.   :0.00000  
+##  1st Qu.:5801139   1st Qu.:0.04571  
+##  Median :5811083   Median :0.06977  
+##  Mean   :5808989   Mean   :0.07860  
+##  3rd Qu.:5820157   3rd Qu.:0.09688  
+##  Max.   :5876189   Max.   :0.88978
+```
+
 ## Export final data
 
 Now lets update `zonesystem.csv` using the updated data for the original
@@ -491,5 +747,5 @@ to the Melbourne Gitlab data repository.
 output_folder <- file.path(dirname(file_path), "output")
 dir.create(output_folder, showWarnings = FALSE)
 output_file <- file.path(output_folder, "zonesystem.csv")
-write.csv(zonesystem_updated[c(zonesystem.csv.columns,"SA2_MAIN16","SEIFA_IRSD_DECILE_2016", "mesh_block_person_count_2016","pwc_x_epsg_28355", "pwc_y_epsg_28355")], output_file, row.names = FALSE)
+write.csv(zonesystem_updated[c(zonesystem.csv.columns,"SA2_MAIN16","SEIFA_IRSD_DECILE_2016", "mesh_block_person_count_2016","pwc_x_epsg_28355", "pwc_y_epsg_28355", "vacancy_rate")], output_file, row.names = FALSE)
 ```
