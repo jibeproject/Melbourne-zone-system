@@ -130,46 +130,114 @@ socio-economic, and spatial attributes suitable for detailed transport
 demand modeling and analysis in the JIBE Melbourne model system.
 
 ``` r
-library(tidyverse)
-## Warning: package 'tidyverse' was built under R version 4.4.2
-## Warning: package 'purrr' was built under R version 4.4.2
-## Warning: package 'stringr' was built under R version 4.4.2
-## Warning: package 'lubridate' was built under R version 4.4.2
-## ── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
-## ✔ dplyr     1.1.4     ✔ readr     2.1.5
-## ✔ forcats   1.0.0     ✔ stringr   1.5.1
-## ✔ ggplot2   3.5.1     ✔ tibble    3.2.1
-## ✔ lubridate 1.9.4     ✔ tidyr     1.3.1
-## ✔ purrr     1.0.2     
-## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
-## ✖ dplyr::filter() masks stats::filter()
-## ✖ dplyr::lag()    masks stats::lag()
-## ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
-library(httr)
-## Warning: package 'httr' was built under R version 4.4.2
+# Ensure required packages are installed and loaded. This will install any missing CRAN packages.
+required_pkgs <- c("tidyverse", "httr", "readxl", "sf", "data.table")
+
+# Identify packages not currently installed
+installed <- rownames(installed.packages())
+missing_pkgs <- setdiff(required_pkgs, installed)
+if (length(missing_pkgs) > 0) {
+  # Ensure a CRAN mirror is set (non-interactive sessions can fail without this)
+  repos <- getOption("repos")
+  if (is.null(repos) || is.na(repos["CRAN"]) || repos["CRAN"] == "@CRAN@" || repos["CRAN"] == "") {
+    options(repos = c(CRAN = "https://cloud.r-project.org"))
+  }
+
+  message("Installing missing packages: ", paste(missing_pkgs, collapse = ", "))
+  tryCatch(
+    install.packages(missing_pkgs, dependencies = TRUE),
+    error = function(e) {
+      stop("Failed to install packages: ", paste(missing_pkgs, collapse = ", "), "\\n",
+           "Install manually or set options(repos = ...) and re-run.\\nError: ", e$message)
+    }
+  )
+
+  # Re-check installed packages after attempted install
+  installed <- rownames(installed.packages())
+  still_missing <- setdiff(missing_pkgs, installed)
+  if (length(still_missing) > 0) {
+    stop("The following packages could not be installed automatically: ",
+         paste(still_missing, collapse = ", "), ".\\n",
+         "If you are on Windows, installing 'sf' may require OS-level dependencies (GDAL/PROJ).",
+         " Install them first or install packages manually and re-run the script.")
+  }
+}
+## Installing missing packages: sf
+## Installing package into 'C:/Users/E33390/AppData/Local/R/win-library/4.5'
+## (as 'lib' is unspecified)
+## also installing the dependencies 'geometries', 'rapidjsonr', 'sfheaders', 'systemfonts', 'logger', 'geojsonsf', 'leaflet.providers', 'svglite', 'plyr', 'goftest', 'tensor', 'stringdist', 'spacesXYZ', 'jsonify', 'slippymath', 'XML', 'leafem', 'leaflet', 'leafpop', 'satellite', 'servr', 'plogr', 'spatstat.data', 'spatstat.univar', 'spatstat.explore', 'spatstat.model', 'deldir', 'polyclip', 'spatstat.sparse', 'abind', 'cols4all', 'leafgl', 'leaflegend', 'leafsync', 'maptiles', 'tmaptools', 's2', 'units', 'nanoarrow', 'covr', 'lwgeom', 'maps', 'mapview', 'microbenchmark', 'odbc', 'pbapply', 'pool', 'raster', 'RPostgres', 'RPostgreSQL', 'RSQLite', 'sp', 'spatstat', 'spatstat.geom', 'spatstat.random', 'spatstat.linnet', 'spatstat.utils', 'stars', 'terra', 'tmap', 'wk'
+## package 'geometries' successfully unpacked and MD5 sums checked
+## package 'rapidjsonr' successfully unpacked and MD5 sums checked
+## package 'sfheaders' successfully unpacked and MD5 sums checked
+## package 'systemfonts' successfully unpacked and MD5 sums checked
+## package 'logger' successfully unpacked and MD5 sums checked
+## package 'geojsonsf' successfully unpacked and MD5 sums checked
+## package 'leaflet.providers' successfully unpacked and MD5 sums checked
+## package 'svglite' successfully unpacked and MD5 sums checked
+## package 'plyr' successfully unpacked and MD5 sums checked
+## package 'goftest' successfully unpacked and MD5 sums checked
+## package 'tensor' successfully unpacked and MD5 sums checked
+## package 'stringdist' successfully unpacked and MD5 sums checked
+## package 'spacesXYZ' successfully unpacked and MD5 sums checked
+## package 'jsonify' successfully unpacked and MD5 sums checked
+## package 'slippymath' successfully unpacked and MD5 sums checked
+## package 'XML' successfully unpacked and MD5 sums checked
+## package 'leafem' successfully unpacked and MD5 sums checked
+## package 'leaflet' successfully unpacked and MD5 sums checked
+## package 'leafpop' successfully unpacked and MD5 sums checked
+## package 'satellite' successfully unpacked and MD5 sums checked
+## package 'servr' successfully unpacked and MD5 sums checked
+## package 'plogr' successfully unpacked and MD5 sums checked
+## package 'spatstat.data' successfully unpacked and MD5 sums checked
+## package 'spatstat.univar' successfully unpacked and MD5 sums checked
+## package 'spatstat.explore' successfully unpacked and MD5 sums checked
+## package 'spatstat.model' successfully unpacked and MD5 sums checked
+## package 'deldir' successfully unpacked and MD5 sums checked
+## package 'polyclip' successfully unpacked and MD5 sums checked
+## package 'spatstat.sparse' successfully unpacked and MD5 sums checked
+## package 'abind' successfully unpacked and MD5 sums checked
+## package 'cols4all' successfully unpacked and MD5 sums checked
+## package 'leafgl' successfully unpacked and MD5 sums checked
+## package 'leaflegend' successfully unpacked and MD5 sums checked
+## package 'leafsync' successfully unpacked and MD5 sums checked
+## package 'maptiles' successfully unpacked and MD5 sums checked
+## package 'tmaptools' successfully unpacked and MD5 sums checked
+## package 's2' successfully unpacked and MD5 sums checked
+## package 'units' successfully unpacked and MD5 sums checked
+## package 'nanoarrow' successfully unpacked and MD5 sums checked
+## package 'covr' successfully unpacked and MD5 sums checked
+## package 'lwgeom' successfully unpacked and MD5 sums checked
+## package 'maps' successfully unpacked and MD5 sums checked
+## package 'mapview' successfully unpacked and MD5 sums checked
+## package 'microbenchmark' successfully unpacked and MD5 sums checked
+## package 'odbc' successfully unpacked and MD5 sums checked
+## package 'pbapply' successfully unpacked and MD5 sums checked
+## package 'pool' successfully unpacked and MD5 sums checked
+## package 'raster' successfully unpacked and MD5 sums checked
+## package 'RPostgres' successfully unpacked and MD5 sums checked
+## package 'RPostgreSQL' successfully unpacked and MD5 sums checked
+## package 'RSQLite' successfully unpacked and MD5 sums checked
+## package 'sp' successfully unpacked and MD5 sums checked
+## package 'spatstat' successfully unpacked and MD5 sums checked
+## package 'spatstat.geom' successfully unpacked and MD5 sums checked
+## package 'spatstat.random' successfully unpacked and MD5 sums checked
+## package 'spatstat.linnet' successfully unpacked and MD5 sums checked
+## package 'spatstat.utils' successfully unpacked and MD5 sums checked
+## package 'stars' successfully unpacked and MD5 sums checked
+## package 'terra' successfully unpacked and MD5 sums checked
+## package 'tmap' successfully unpacked and MD5 sums checked
+## package 'wk' successfully unpacked and MD5 sums checked
+## package 'sf' successfully unpacked and MD5 sums checked
+## 
+## The downloaded binary packages are in
+##  C:\Users\E33390\AppData\Local\Temp\Rtmp2lHplL\downloaded_packages
+
+# Load base 'utils' explicitly (it is part of base R) and then load the required packages
 library(utils)
-library(readxl)
-## Warning: package 'readxl' was built under R version 4.4.2
-library(sf)
-## Warning: package 'sf' was built under R version 4.4.3
-## Linking to GEOS 3.13.0, GDAL 3.10.1, PROJ 9.5.1; sf_use_s2() is TRUE
-library(data.table)
-## Warning: package 'data.table' was built under R version 4.4.2
-## 
-## Attaching package: 'data.table'
-## 
-## The following objects are masked from 'package:lubridate':
-## 
-##     hour, isoweek, mday, minute, month, quarter, second, wday, week,
-##     yday, year
-## 
-## The following objects are masked from 'package:dplyr':
-## 
-##     between, first, last
-## 
-## The following object is masked from 'package:purrr':
-## 
-##     transpose
+invisible(lapply(required_pkgs, function(pkg) {
+  suppressPackageStartupMessages(library(pkg, character.only = TRUE))
+}))
+## Warning: package 'sf' was built under R version 4.5.2
 ```
 
 First, we’ll load in the current Melbourne `zonesystem.csv` file
@@ -433,6 +501,13 @@ seifa_data <- seifa_data %>%
 zonesystem_updated <- zonesystem_updated %>%
   left_join(seifa_data[,c('SA1_MAIN16','SEIFA_IRSD_DECILE_2016')], by = "SA1_MAIN16")
 
+# Join additional SEIFA linkage codes using SA1_7DIG16 and "2016 Statistical Area Level 2 (SA2) Name" (renamed as SA2_NAME_2016)
+seifa_linkage <- read_excel(destfile_seifa, sheet = "Table 7", skip = 4, n_max = 57523)
+zonesystem_updated <- zonesystem_updated %>%
+  left_join(seifa_linkage[, c("2016 Statistical Area Level 1  (SA1) 7-Digit Code", "2016 Statistical Area Level 2 (SA2) Name")], 
+            by = c("SA1_7DIG16" = "2016 Statistical Area Level 1  (SA1) 7-Digit Code")) %>%
+  rename(SA2_NAME_2016 = `2016 Statistical Area Level 2 (SA2) Name`)
+
 # Display the first few rows of the updated data with SEIFA
 head(zonesystem_updated)
 ##   SA1_7DIG16  SA1_MAIN16 CHR EYA EE EDU       FIN       FR       PHC      RSPF
@@ -463,13 +538,13 @@ head(zonesystem_updated)
 ## 4             2      Victoria           0.0597  206011105
 ## 5             2      Victoria           0.0685  206011105
 ## 6             2      Victoria           0.0799  206011105
-##   SEIFA_IRSD_DECILE_2016
-## 1                      7
-## 2                      5
-## 3                      4
-## 4                      6
-## 5                      8
-## 6                      5
+##   SEIFA_IRSD_DECILE_2016 SA2_NAME_2016
+## 1                      7     Brunswick
+## 2                      5     Brunswick
+## 3                      4     Brunswick
+## 4                      6     Brunswick
+## 5                      8     Brunswick
+## 6                      5     Brunswick
 ```
 
 ## Add population weighted centroid coordinates
@@ -585,20 +660,20 @@ zonesystem_updated %>% head()
 ## 4             2      Victoria           0.0597  206011105
 ## 5             2      Victoria           0.0685  206011105
 ## 6             2      Victoria           0.0799  206011105
-##   SEIFA_IRSD_DECILE_2016 mesh_block_person_count_2016 pwc_x_epsg_28355
-## 1                      7                          219         321348.3
-## 2                      5                          632         320813.2
-## 3                      4                          448         321107.4
-## 4                      6                          353         321306.5
-## 5                      8                          356         321039.9
-## 6                      5                          445         320708.2
-##   pwc_y_epsg_28355
-## 1          5818989
-## 2          5818610
-## 3          5818556
-## 4          5818280
-## 5          5818304
-## 6          5818351
+##   SEIFA_IRSD_DECILE_2016 SA2_NAME_2016 mesh_block_person_count_2016
+## 1                      7     Brunswick                          219
+## 2                      5     Brunswick                          632
+## 3                      4     Brunswick                          448
+## 4                      6     Brunswick                          353
+## 5                      8     Brunswick                          356
+## 6                      5     Brunswick                          445
+##   pwc_x_epsg_28355 pwc_y_epsg_28355
+## 1         321348.3          5818989
+## 2         320813.2          5818610
+## 3         321107.4          5818556
+## 4         321306.5          5818280
+## 5         321039.9          5818304
+## 6         320708.2          5818351
 ```
 
 ## Add percentage vacant dwellings
@@ -682,7 +757,7 @@ summary(zonesystem_updated)
 ##  Median : 0.0000   Median :0.00000   Median : 0.00000   Median : 0.0000  
 ##  Mean   : 0.1966   Mean   :0.03715   Mean   : 0.05198   Mean   : 0.1368  
 ##  3rd Qu.: 0.0000   3rd Qu.:0.00000   3rd Qu.: 0.00000   3rd Qu.: 0.0000  
-##  Max.   :63.4058   Max.   :4.94803   Max.   :19.58056   Max.   :53.1626  
+##  Max.   :63.4058   Max.   :4.94803   Max.   :19.58055   Max.   :53.1626  
 ##       PHC               RSPF               SER                SCL         
 ##  Min.   :0.00000   Min.   : 0.00000   Min.   :  0.0000   Min.   :0.00000  
 ##  1st Qu.:0.00000   1st Qu.: 0.00000   1st Qu.:  0.0000   1st Qu.:0.00000  
@@ -690,13 +765,13 @@ summary(zonesystem_updated)
 ##  Mean   :0.02961   Mean   : 0.04616   Mean   :  0.3699   Mean   :0.02772  
 ##  3rd Qu.:0.00000   3rd Qu.: 0.00000   3rd Qu.:  0.0000   3rd Qu.:0.00000  
 ##  Max.   :8.20925   Max.   :10.86753   Max.   :195.4371   Max.   :7.26985  
-##       work           education              HH              POS          
-##  Min.   :  0.000   Min.   :  0.0000   Min.   :   0.0   Min.   :  0.0000  
-##  1st Qu.:  0.000   1st Qu.:  0.0000   1st Qu.: 123.0   1st Qu.:  0.0000  
-##  Median :  0.000   Median :  0.0000   Median : 164.0   Median :  0.0086  
-##  Mean   :  1.944   Mean   :  0.8178   Mean   : 178.6   Mean   :  1.7567  
-##  3rd Qu.:  1.000   3rd Qu.:  0.0000   3rd Qu.: 214.0   3rd Qu.:  0.3755  
-##  Max.   :410.000   Max.   :171.0000   Max.   :3278.0   Max.   :696.6695  
+##       work           education              HH              POS           
+##  Min.   :  0.000   Min.   :  0.0000   Min.   :   0.0   Min.   :  0.00000  
+##  1st Qu.:  0.000   1st Qu.:  0.0000   1st Qu.: 123.0   1st Qu.:  0.00000  
+##  Median :  0.000   Median :  0.0000   Median : 164.0   Median :  0.00863  
+##  Mean   :  1.944   Mean   :  0.8178   Mean   : 178.6   Mean   :  1.75673  
+##  3rd Qu.:  1.000   3rd Qu.:  0.0000   3rd Qu.: 214.0   3rd Qu.:  0.37550  
+##  Max.   :410.000   Max.   :171.0000   Max.   :3278.0   Max.   :696.66954  
 ##     HH_sqrt       urbanType         UCL_CODE_2016    UCL_NAME_2016     
 ##  Min.   : 0.00   Length:10289       Min.   :201001   Length:10289      
 ##  1st Qu.:11.09   Class :character   1st Qu.:201001   Class :character  
@@ -718,20 +793,20 @@ summary(zonesystem_updated)
 ##  Mean   :2                        Mean   :  0.9712                     
 ##  3rd Qu.:2                        3rd Qu.:  0.2384                     
 ##  Max.   :2                        Max.   :275.6103                     
-##  SEIFA_IRSD_DECILE_2016 mesh_block_person_count_2016 pwc_x_epsg_28355
-##  Length:10289           Min.   :   0.0               Min.   :270549  
-##  Class :character       1st Qu.: 332.0               1st Qu.:318143  
-##  Mode  :character       Median : 418.0               Median :329156  
-##                         Mean   : 435.8               Mean   :328590  
-##                         3rd Qu.: 519.0               3rd Qu.:339877  
-##                         Max.   :4354.0               Max.   :395506  
-##  pwc_y_epsg_28355   vacancy_rate    
-##  Min.   :5739814   Min.   :0.00000  
-##  1st Qu.:5801139   1st Qu.:0.04571  
-##  Median :5811083   Median :0.06977  
-##  Mean   :5808989   Mean   :0.07860  
-##  3rd Qu.:5820157   3rd Qu.:0.09688  
-##  Max.   :5876189   Max.   :0.88978
+##  SEIFA_IRSD_DECILE_2016 SA2_NAME_2016      mesh_block_person_count_2016
+##  Length:10289           Length:10289       Min.   :   0.0              
+##  Class :character       Class :character   1st Qu.: 332.0              
+##  Mode  :character       Mode  :character   Median : 418.0              
+##                                            Mean   : 435.8              
+##                                            3rd Qu.: 519.0              
+##                                            Max.   :4354.0              
+##  pwc_x_epsg_28355 pwc_y_epsg_28355   vacancy_rate    
+##  Min.   :270549   Min.   :5739815   Min.   :0.00000  
+##  1st Qu.:318143   1st Qu.:5801139   1st Qu.:0.04571  
+##  Median :329156   Median :5811083   Median :0.06977  
+##  Mean   :328590   Mean   :5808989   Mean   :0.07860  
+##  3rd Qu.:339876   3rd Qu.:5820157   3rd Qu.:0.09688  
+##  Max.   :395506   Max.   :5876189   Max.   :0.88978
 ```
 
 ## Export final data
@@ -747,5 +822,5 @@ to the Melbourne Gitlab data repository.
 output_folder <- file.path(dirname(file_path), "output")
 dir.create(output_folder, showWarnings = FALSE)
 output_file <- file.path(output_folder, "zonesystem.csv")
-write.csv(zonesystem_updated[c(zonesystem.csv.columns,"SA2_MAIN16","SEIFA_IRSD_DECILE_2016", "mesh_block_person_count_2016","pwc_x_epsg_28355", "pwc_y_epsg_28355", "vacancy_rate")], output_file, row.names = FALSE)
+write.csv(zonesystem_updated[c(zonesystem.csv.columns,"SA2_MAIN16","SA2_NAME_2016","SEIFA_IRSD_DECILE_2016", "mesh_block_person_count_2016","pwc_x_epsg_28355", "pwc_y_epsg_28355", "vacancy_rate")], output_file, row.names = FALSE)
 ```

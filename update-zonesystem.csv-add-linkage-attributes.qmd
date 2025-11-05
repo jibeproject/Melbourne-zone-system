@@ -93,12 +93,44 @@ The enhanced zone system file includes all original attributes plus:
 This enhanced dataset provides comprehensive demographic, socio-economic, and spatial attributes suitable for detailed transport demand modeling and analysis in the JIBE Melbourne model system.
 
 ```{r load-librarise}
-library(tidyverse)
-library(httr)
+# Ensure required packages are installed and loaded. This will install any missing CRAN packages.
+required_pkgs <- c("tidyverse", "httr", "readxl", "sf", "data.table")
+
+# Identify packages not currently installed
+installed <- rownames(installed.packages())
+missing_pkgs <- setdiff(required_pkgs, installed)
+if (length(missing_pkgs) > 0) {
+  # Ensure a CRAN mirror is set (non-interactive sessions can fail without this)
+  repos <- getOption("repos")
+  if (is.null(repos) || is.na(repos["CRAN"]) || repos["CRAN"] == "@CRAN@" || repos["CRAN"] == "") {
+    options(repos = c(CRAN = "https://cloud.r-project.org"))
+  }
+
+  message("Installing missing packages: ", paste(missing_pkgs, collapse = ", "))
+  tryCatch(
+    install.packages(missing_pkgs, dependencies = TRUE),
+    error = function(e) {
+      stop("Failed to install packages: ", paste(missing_pkgs, collapse = ", "), "\\n",
+           "Install manually or set options(repos = ...) and re-run.\\nError: ", e$message)
+    }
+  )
+
+  # Re-check installed packages after attempted install
+  installed <- rownames(installed.packages())
+  still_missing <- setdiff(missing_pkgs, installed)
+  if (length(still_missing) > 0) {
+    stop("The following packages could not be installed automatically: ",
+         paste(still_missing, collapse = ", "), ".\\n",
+         "If you are on Windows, installing 'sf' may require OS-level dependencies (GDAL/PROJ).",
+         " Install them first or install packages manually and re-run the script.")
+  }
+}
+
+# Load base 'utils' explicitly (it is part of base R) and then load the required packages
 library(utils)
-library(readxl)
-library(sf)
-library(data.table)
+invisible(lapply(required_pkgs, function(pkg) {
+  suppressPackageStartupMessages(library(pkg, character.only = TRUE))
+}))
 ```
 
 
@@ -224,6 +256,13 @@ seifa_data <- seifa_data %>%
 # Perform a left join to merge SEIFA data with zonesystem_updated on SA1_MAIN16
 zonesystem_updated <- zonesystem_updated %>%
   left_join(seifa_data[,c('SA1_MAIN16','SEIFA_IRSD_DECILE_2016')], by = "SA1_MAIN16")
+
+# Join additional SEIFA linkage codes using SA1_7DIG16 and "2016 Statistical Area Level 2 (SA2) Name" (renamed as SA2_NAME_2016)
+seifa_linkage <- read_excel(destfile_seifa, sheet = "Table 7", skip = 4, n_max = 57523)
+zonesystem_updated <- zonesystem_updated %>%
+  left_join(seifa_linkage[, c("2016 Statistical Area Level 1  (SA1) 7-Digit Code", "2016 Statistical Area Level 2 (SA2) Name")], 
+            by = c("SA1_7DIG16" = "2016 Statistical Area Level 1  (SA1) 7-Digit Code")) %>%
+  rename(SA2_NAME_2016 = `2016 Statistical Area Level 2 (SA2) Name`)
 
 # Display the first few rows of the updated data with SEIFA
 head(zonesystem_updated)
@@ -365,5 +404,5 @@ Now lets update `zonesystem.csv` using the updated data for the original set of 
 output_folder <- file.path(dirname(file_path), "output")
 dir.create(output_folder, showWarnings = FALSE)
 output_file <- file.path(output_folder, "zonesystem.csv")
-write.csv(zonesystem_updated[c(zonesystem.csv.columns,"SA2_MAIN16","SEIFA_IRSD_DECILE_2016", "mesh_block_person_count_2016","pwc_x_epsg_28355", "pwc_y_epsg_28355", "vacancy_rate")], output_file, row.names = FALSE)
+write.csv(zonesystem_updated[c(zonesystem.csv.columns,"SA2_MAIN16","SA2_NAME_2016","SEIFA_IRSD_DECILE_2016", "mesh_block_person_count_2016","pwc_x_epsg_28355", "pwc_y_epsg_28355", "vacancy_rate")], output_file, row.names = FALSE)
 ```
